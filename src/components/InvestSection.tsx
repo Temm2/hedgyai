@@ -5,14 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Bot, TrendingUp, DollarSign, Clock, Trash2, Activity } from "lucide-react";
+import { Bot, TrendingUp, DollarSign, Clock, Trash2, Activity, Shield, Calculator, Fuel } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { StrategyRecommendationModal } from "./StrategyRecommendationModal";
 
 interface Investment {
   id: string;
   amount: string;
   chain: string;
   tokenType: string;
+  withdrawChain: string;
+  withdrawCurrency: string;
+  lockPeriod: string;
+  strategy: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  guaranteedReturn: string;
+  minReturn: string;
+  gasFee: string;
   timestamp: Date;
   status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
@@ -29,7 +38,15 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
   const [investmentData, setInvestmentData] = useState({
     chain: "1", // Ethereum mainnet
     amount: "",
-    tokenType: "ETH"
+    tokenType: "ETH",
+    withdrawChain: "1",
+    withdrawCurrency: "ETH",
+    lockPeriod: "30",
+    strategy: "",
+    riskLevel: "Medium" as const,
+    guaranteedReturn: "",
+    minReturn: "",
+    gasFee: ""
   });
   
   const [investmentHistory, setInvestmentHistory] = useState<Investment[]>([]);
@@ -49,8 +66,26 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
     setInvestmentData(prev => ({ ...prev, [field]: value }));
   };
 
+  const calculateMinReturn = (amount: string, strategy: string, lockPeriod: string) => {
+    const strategies: Record<string, number> = {
+      "Stablecoin Farming": 8,
+      "Momentum Rotation": 15,
+      "Mean Reversion": 12,
+      "Multi-Chain Arbitrage": 12,
+      "High-Yield Crypto Credit": 25,
+      "Options Writing": 18,
+      "Structured Products": 20,
+      "Meta Model Blend": 16
+    };
+    
+    const baseRate = strategies[strategy] || 10;
+    const lockMultiplier = parseInt(lockPeriod) / 30; // Monthly multiplier
+    const minReturn = parseFloat(amount) * (baseRate / 100) * lockMultiplier;
+    return minReturn.toFixed(2);
+  };
+
   const handleInvestNow = () => {
-    if (!investmentData.amount || !investmentData.chain || !investmentData.tokenType) {
+    if (!investmentData.amount || !investmentData.chain || !investmentData.tokenType || !investmentData.strategy) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields before investing.",
@@ -59,11 +94,22 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
       return;
     }
 
+    const minReturn = calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod);
+    const guaranteedReturn = (parseFloat(minReturn) * 0.8).toFixed(2); // 80% of min return as guaranteed
+
     const newInvestment: Investment = {
       id: Date.now().toString(),
       amount: investmentData.amount,
       chain: investmentData.chain,
       tokenType: investmentData.tokenType,
+      withdrawChain: investmentData.withdrawChain,
+      withdrawCurrency: investmentData.withdrawCurrency,
+      lockPeriod: investmentData.lockPeriod,
+      strategy: investmentData.strategy,
+      riskLevel: investmentData.riskLevel,
+      guaranteedReturn,
+      minReturn,
+      gasFee: investmentData.gasFee,
       timestamp: new Date(),
       status: 'pending'
     };
@@ -74,7 +120,15 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
     setInvestmentData({
       chain: "1",
       amount: "",
-      tokenType: "ETH"
+      tokenType: "ETH",
+      withdrawChain: "1",
+      withdrawCurrency: "ETH",
+      lockPeriod: "30",
+      strategy: "",
+      riskLevel: "Medium" as const,
+      guaranteedReturn: "",
+      minReturn: "",
+      gasFee: ""
     });
 
     toast({
@@ -116,7 +170,7 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
             </span>
           </h1>
           <p className="text-lg text-muted-foreground">
-            Configure your investment and let Eliza AI optimize your returns
+            Configure your investment and let Hedgy optimize your returns
           </p>
         </div>
 
@@ -177,15 +231,137 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                   </Select>
                 </div>
 
+                {/* Withdraw Chain */}
+                <div className="space-y-2">
+                  <Label htmlFor="withdrawChain">Withdraw Chain</Label>
+                  <Select value={investmentData.withdrawChain} onValueChange={(value) => handleInputChange("withdrawChain", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select withdraw chain" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {chains.map((chain) => (
+                        <SelectItem key={chain.id} value={chain.id}>
+                          {chain.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Withdraw Currency */}
+                <div className="space-y-2">
+                  <Label htmlFor="withdrawCurrency">Withdraw Currency</Label>
+                  <Select value={investmentData.withdrawCurrency} onValueChange={(value) => handleInputChange("withdrawCurrency", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select withdraw currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tokenTypes.map((token) => (
+                        <SelectItem key={token} value={token}>
+                          {token}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Locked Period */}
+                <div className="space-y-2">
+                  <Label htmlFor="lockPeriod">Locked Period (days)</Label>
+                  <Select value={investmentData.lockPeriod} onValueChange={(value) => handleInputChange("lockPeriod", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select lock period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">7 days</SelectItem>
+                      <SelectItem value="14">14 days</SelectItem>
+                      <SelectItem value="30">30 days</SelectItem>
+                      <SelectItem value="60">60 days</SelectItem>
+                      <SelectItem value="90">90 days</SelectItem>
+                      <SelectItem value="180">180 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Strategy Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="strategy">Strategy Selection</Label>
+                  <Select value={investmentData.strategy} onValueChange={(value) => handleInputChange("strategy", value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select investment strategy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Momentum Rotation">Momentum Rotation</SelectItem>
+                      <SelectItem value="Mean Reversion">Mean Reversion</SelectItem>
+                      <SelectItem value="Multi-Chain Arbitrage">Multi-Chain Arbitrage</SelectItem>
+                      <SelectItem value="Stablecoin Farming">Stablecoin Farming</SelectItem>
+                      <SelectItem value="High-Yield Crypto Credit">High-Yield Crypto Credit</SelectItem>
+                      <SelectItem value="Options Writing">Options Writing</SelectItem>
+                      <SelectItem value="Structured Products">Structured Products</SelectItem>
+                      <SelectItem value="Meta Model Blend">Meta Model Blend</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <StrategyRecommendationModal onStrategySelect={(strategy) => handleInputChange("strategy", strategy)} />
+                </div>
+
+                {/* Risk Level & Returns Display */}
+                {investmentData.strategy && (
+                  <div className="space-y-4 p-4 bg-background/30 rounded-lg border">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Risk Level
+                      </Label>
+                      <Badge variant={
+                        ['Stablecoin Farming'].includes(investmentData.strategy) ? 'secondary' :
+                        ['Momentum Rotation', 'Mean Reversion', 'Multi-Chain Arbitrage', 'Options Writing', 'Meta Model Blend'].includes(investmentData.strategy) ? 'default' : 'destructive'
+                      }>
+                        {['Stablecoin Farming'].includes(investmentData.strategy) ? 'Low' :
+                         ['Momentum Rotation', 'Mean Reversion', 'Multi-Chain Arbitrage', 'Options Writing', 'Meta Model Blend'].includes(investmentData.strategy) ? 'Medium' : 'High'}
+                      </Badge>
+                    </div>
+                    
+                    {investmentData.amount && (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="flex items-center gap-2 text-sm">
+                              <Calculator className="w-3 h-3" />
+                              Min Return
+                            </Label>
+                            <p className="font-semibold text-green-500">
+                              {calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod)} {investmentData.tokenType}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm">Guaranteed Return</Label>
+                            <p className="font-semibold text-blue-500">
+                              {(parseFloat(calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod)) * 0.8).toFixed(2)} {investmentData.tokenType}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <Label className="flex items-center gap-2 text-sm">
+                            <Fuel className="w-3 h-3" />
+                            Estimated Gas Fee
+                          </Label>
+                          <p className="font-medium">~0.02 ETH</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* Invest Button */}
-                  <Button 
-                    className="w-full"
-                    onClick={handleInvestNow}
-                    disabled={!investmentData.amount || !investmentData.chain || !investmentData.tokenType}
-                  >
-                    <Bot className="w-5 h-5 mr-2" />
-                    Start Hedgy Agent
-                  </Button>
+                <Button 
+                  className="w-full"
+                  onClick={handleInvestNow}
+                  disabled={!investmentData.amount || !investmentData.chain || !investmentData.tokenType || !investmentData.strategy}
+                >
+                  <Bot className="w-5 h-5 mr-2" />
+                  Start Hedgy Agent
+                </Button>
               </CardContent>
             </Card>
 

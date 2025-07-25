@@ -10,6 +10,14 @@ interface Investment {
   amount: string;
   chain: string;
   tokenType: string;
+  withdrawChain: string;
+  withdrawCurrency: string;
+  lockPeriod: string;
+  strategy: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  guaranteedReturn: string;
+  minReturn: string;
+  gasFee: string;
   timestamp: Date;
   status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
