@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Wallet, Sun, Moon, Menu, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { MultiChainWallet } from "./MultiChainWallet";
 
 interface NavigationProps {
   darkMode: boolean;
@@ -13,6 +14,7 @@ interface NavigationProps {
 export function Navigation({ darkMode, toggleDarkMode, currentSection, setCurrentSection }: NavigationProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const { toast } = useToast();
 
   const sections = [
@@ -24,21 +26,7 @@ export function Navigation({ darkMode, toggleDarkMode, currentSection, setCurren
 
   const handleWalletConnect = () => {
     if (!isConnected) {
-      // Simulate KYC flow for first-time users
-      toast({
-        title: "Complete KYC Required",
-        description: "Please complete your KYC verification to connect your wallet.",
-        duration: 3000,
-      });
-      // In a real app, this would redirect to KYC flow
-      setTimeout(() => {
-        setIsConnected(true);
-        toast({
-          title: "Wallet Connected",
-          description: "Successfully connected to MetaMask",
-          duration: 3000,
-        });
-      }, 2000);
+      setIsWalletModalOpen(true);
     } else {
       setIsConnected(false);
       toast({
@@ -47,6 +35,15 @@ export function Navigation({ darkMode, toggleDarkMode, currentSection, setCurren
         duration: 3000,
       });
     }
+  };
+
+  const handleWalletConnected = () => {
+    setIsConnected(true);
+    setIsWalletModalOpen(false);
+  };
+
+  const handleWalletDisconnected = () => {
+    setIsConnected(false);
   };
 
   return (
@@ -161,6 +158,13 @@ export function Navigation({ darkMode, toggleDarkMode, currentSection, setCurren
           </div>
         )}
       </div>
+
+      <MultiChainWallet
+        isOpen={isWalletModalOpen}
+        onClose={() => setIsWalletModalOpen(false)}
+        onConnect={handleWalletConnected}
+        onDisconnect={handleWalletDisconnected}
+      />
     </nav>
   );
 }

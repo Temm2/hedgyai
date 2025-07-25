@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, TrendingUp, DollarSign, Bot } from "lucide-react";
 import { ElizaAgent } from "@/components/ElizaAgent";
-import { MultiChainWallet } from "@/components/MultiChainWallet";
+
 
 interface Investment {
   id: string;
@@ -103,19 +103,12 @@ export function MonitorSection({ investments = [] }: MonitorSectionProps) {
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Multi-Chain Wallet */}
-          <div className="lg:col-span-1">
-            <MultiChainWallet />
-          </div>
-          
-          {/* Agent Monitoring */}
-          <div className="lg:col-span-2">
-            <ElizaAgent 
-              investments={investments}
-              onAgentUpdate={handleAgentUpdate}
-            />
-          </div>
+        {/* Agent Monitoring */}
+        <div className="w-full">
+          <ElizaAgent 
+            investments={investments}
+            onAgentUpdate={handleAgentUpdate}
+          />
         </div>
       </div>
     </div>
