@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Info, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Upload, FileText, ArrowUpDown } from "lucide-react";
+import { Info, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Upload, FileText, ArrowUpDown, Zap, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useOneInch, SUPPORTED_CHAINS, TOKEN_ADDRESSES } from "@/hooks/use-oneinch";
+import { OneInchIntegration } from "@/components/OneInchIntegration";
 
 export function InvestSection() {
   const [investmentData, setInvestmentData] = useState({
@@ -33,7 +35,22 @@ export function InvestSection() {
   const [comparisonReturn, setComparisonReturn] = useState("0.00");
   const [signalFile, setSignalFile] = useState<File | null>(null);
   const [signalData, setSignalData] = useState("");
+  const [fusionQuote, setFusionQuote] = useState<any>(null);
+  const [limitOrderMode, setLimitOrderMode] = useState(false);
+  const [walletAddress] = useState("0x742d35Cc6639C0532fBb9ea7e1ED"); // Demo address
   const { toast } = useToast();
+  
+  // 1inch integration
+  const {
+    tokens,
+    isLoading: oneInchLoading,
+    error: oneInchError,
+    loadTokens,
+    getFusionQuote,
+    executeFusionSwap,
+    createLimitOrder,
+    getTokenPrices
+  } = useOneInch();
 
   const chains = [
     "Ethereum", "Bitcoin", "Sui", "Aptos", "Binance Smart Chain", 
@@ -108,7 +125,43 @@ export function InvestSection() {
     }
   };
 
-  const handleInvest = () => {
+  // Load tokens when chain changes
+  useEffect(() => {
+    if (investmentData.chain === "Ethereum") {
+      loadTokens(SUPPORTED_CHAINS.ETHEREUM);
+    }
+  }, [investmentData.chain, loadTokens]);
+
+  // Get real-time Fusion+ quote
+  const handleGetFusionQuote = async () => {
+    if (!investmentData.amount || !walletAddress) return;
+    
+    try {
+      const quote = await getFusionQuote({
+        srcToken: TOKEN_ADDRESSES.USDC, // From USDC
+        dstToken: TOKEN_ADDRESSES.ETH,  // To ETH (for investment)
+        amount: (parseFloat(investmentData.amount) * 1e6).toString(), // USDC has 6 decimals
+        walletAddress,
+        chainId: SUPPORTED_CHAINS.ETHEREUM
+      });
+      setFusionQuote(quote);
+      
+      toast({
+        title: "Fusion+ Quote Updated",
+        description: `Best rate: ${quote.dstAmount} ETH for $${investmentData.amount}`,
+      });
+    } catch (error) {
+      console.error('Fusion quote error:', error);
+      toast({
+        title: "Quote Error",
+        description: "Failed to get Fusion+ quote. Using estimated rates.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Execute investment with 1inch Fusion+ or Limit Order
+  const handleInvest = async () => {
     if (!investmentData.chain || !investmentData.amount || !investmentData.strategy) {
       toast({
         title: "Missing Information",
@@ -118,11 +171,47 @@ export function InvestSection() {
       return;
     }
 
-    toast({
-      title: "Investment Initiated",
-      description: `Investing $${investmentData.amount} in ${investmentData.strategy}`,
-      duration: 3000,
-    });
+    try {
+      if (limitOrderMode) {
+        // Create limit order for gradual investment
+        const order = await createLimitOrder({
+          makerAsset: TOKEN_ADDRESSES.USDC,
+          takerAsset: TOKEN_ADDRESSES.ETH,
+          makingAmount: (parseFloat(investmentData.amount) * 1e6).toString(),
+          takingAmount: fusionQuote?.dstAmount || "1000000000000000000", // 1 ETH fallback
+          maker: walletAddress,
+          chainId: SUPPORTED_CHAINS.ETHEREUM
+        });
+        
+        toast({
+          title: "Limit Order Created",
+          description: `Order ${order.orderHash} created for ${investmentData.strategy}`,
+          duration: 5000,
+        });
+      } else {
+        // Execute immediate Fusion+ swap
+        const swap = await executeFusionSwap({
+          srcToken: TOKEN_ADDRESSES.USDC,
+          dstToken: TOKEN_ADDRESSES.ETH,
+          amount: (parseFloat(investmentData.amount) * 1e6).toString(),
+          walletAddress,
+          chainId: SUPPORTED_CHAINS.ETHEREUM
+        });
+        
+        toast({
+          title: "Fusion+ Investment Executed",
+          description: `Investing $${investmentData.amount} in ${investmentData.strategy} via Fusion+`,
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      console.error('Investment error:', error);
+      toast({
+        title: "Investment Failed",
+        description: limitOrderMode ? "Failed to create limit order" : "Failed to execute Fusion+ swap",
+        variant: "destructive"
+      });
+    }
   };
 
   const getRiskColor = (risk: string) => {
@@ -148,14 +237,17 @@ export function InvestSection() {
           </p>
         </div>
 
-        <Card className="bg-gradient-card backdrop-blur-glass border-primary/20">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-primary" />
-              Investment Configuration
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Investment Configuration */}
+          <div className="lg:col-span-2">
+            <Card className="bg-gradient-card backdrop-blur-glass border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-primary" />
+                  Investment Configuration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
             {/* Chain Selection */}
             <div className="space-y-2">
               <Label htmlFor="chain">Chain</Label>
@@ -399,6 +491,64 @@ export function InvestSection() {
               </Select>
             </div>
 
+            {/* 1inch Execution Mode Selection */}
+            <div className="space-y-4">
+              <Label>Execution Mode (1inch Integration)</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card 
+                  className={`p-4 cursor-pointer transition-all ${!limitOrderMode ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
+                  onClick={() => setLimitOrderMode(false)}
+                >
+                  <div className="flex items-center gap-3">
+                    <Zap className="w-5 h-5 text-primary" />
+                    <div>
+                      <h4 className="font-medium">Fusion+ (Instant)</h4>
+                      <p className="text-xs text-muted-foreground">MEV-protected instant execution</p>
+                    </div>
+                  </div>
+                </Card>
+                
+                <Card 
+                  className={`p-4 cursor-pointer transition-all ${limitOrderMode ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
+                  onClick={() => setLimitOrderMode(true)}
+                >
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-primary" />
+                    <div>
+                      <h4 className="font-medium">Limit Order</h4>
+                      <p className="text-xs text-muted-foreground">Set price & wait for execution</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+              
+              {/* Fusion+ Quote Button */}
+              {!limitOrderMode && investmentData.amount && investmentData.chain === "Ethereum" && (
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleGetFusionQuote}
+                    disabled={oneInchLoading}
+                  >
+                    <ArrowUpDown className="w-4 h-4 mr-1" />
+                    {oneInchLoading ? "Getting Quote..." : "Get Fusion+ Quote"}
+                  </Button>
+                  {fusionQuote && (
+                    <Badge variant="outline" className="text-xs">
+                      Rate: {parseFloat(fusionQuote.dstAmount) / 1e18} ETH
+                    </Badge>
+                  )}
+                </div>
+              )}
+              
+              {oneInchError && (
+                <div className="text-xs text-destructive bg-destructive/10 p-2 rounded">
+                  {oneInchError}
+                </div>
+              )}
+            </div>
+
             {/* Auto Lock Increase Toggle */}
             <div className="flex items-center justify-between p-4 bg-muted/20 rounded-lg border border-border">
               <div className="space-y-1">
@@ -464,17 +614,33 @@ export function InvestSection() {
             )}
 
             {/* Invest Button */}
-            <Button 
-              variant="invest" 
-              size="xl" 
-              className="w-full"
-              onClick={handleInvest}
-            >
-              <TrendingUp className="w-5 h-5 mr-2" />
-              Invest Now
-            </Button>
-          </CardContent>
-        </Card>
+                <Button 
+                  variant="invest" 
+                  size="xl" 
+                  className="w-full"
+                  onClick={handleInvest}
+                >
+                  <TrendingUp className="w-5 h-5 mr-2" />
+                  Invest Now
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 1inch Integration Sidebar */}
+          <div className="lg:col-span-1">
+            <OneInchIntegration 
+              investmentAmount={investmentData.amount}
+              selectedChain={investmentData.chain}
+              onExecutionComplete={(result) => {
+                toast({
+                  title: "1inch Execution Complete",
+                  description: "Transaction submitted successfully",
+                });
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
