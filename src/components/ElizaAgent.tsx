@@ -1,0 +1,300 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useOneInch, SUPPORTED_CHAINS } from "@/hooks/use-oneinch";
+import { useToast } from "@/hooks/use-toast";
+import { Bot, Activity, Zap, Clock, Target, TrendingUp, Shield } from "lucide-react";
+
+interface Investment {
+  id: string;
+  amount: string;
+  chain: string;
+  tokenType: string;
+  timestamp: Date;
+  status: 'pending' | 'active' | 'completed';
+  elizaId?: string;
+}
+
+interface ElizaAgentStatus {
+  id: string;
+  status: 'idle' | 'analyzing' | 'executing' | 'monitoring';
+  currentAction: string;
+  investment: Investment;
+  trades: number;
+  pnl: string;
+  lastActivity: Date;
+}
+
+interface ElizaAgentProps {
+  investments: Investment[];
+  onAgentUpdate: (agentId: string, update: Partial<ElizaAgentStatus>) => void;
+}
+
+export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
+  const [agents, setAgents] = useState<ElizaAgentStatus[]>([]);
+  const { toast } = useToast();
+  const {
+    tokens,
+    loadTokens,
+    getFusionQuote,
+    executeFusionSwap,
+    createLimitOrder,
+    isLoading
+  } = useOneInch();
+
+  useEffect(() => {
+    // Create agents for new investments
+    investments.forEach(investment => {
+      if (!agents.find(agent => agent.investment.id === investment.id)) {
+        startElizaAgent(investment);
+      }
+    });
+  }, [investments]);
+
+  const startElizaAgent = async (investment: Investment) => {
+    const agentId = `eliza_${investment.id}`;
+    
+    const newAgent: ElizaAgentStatus = {
+      id: agentId,
+      status: 'analyzing',
+      currentAction: 'Initializing agent and analyzing market conditions...',
+      investment,
+      trades: 0,
+      pnl: '+0.00%',
+      lastActivity: new Date()
+    };
+
+    setAgents(prev => [...prev, newAgent]);
+
+    // Load tokens for the investment chain
+    await loadTokens(parseInt(investment.chain));
+
+    // Simulate Eliza agent workflow
+    await simulateElizaWorkflow(agentId, investment);
+  };
+
+  const simulateElizaWorkflow = async (agentId: string, investment: Investment) => {
+    const updateAgent = (update: Partial<ElizaAgentStatus>) => {
+      setAgents(prev => prev.map(agent => 
+        agent.id === agentId ? { ...agent, ...update, lastActivity: new Date() } : agent
+      ));
+      onAgentUpdate(agentId, update);
+    };
+
+    try {
+      // Phase 1: Market Analysis
+      updateAgent({
+        status: 'analyzing',
+        currentAction: 'Analyzing market conditions and optimal entry points...'
+      });
+      await delay(2000);
+
+      // Phase 2: Strategy Selection
+      updateAgent({
+        currentAction: 'Selecting optimal strategy based on market volatility...'
+      });
+      await delay(1500);
+
+      // Phase 3: 1inch Integration
+      updateAgent({
+        status: 'executing',
+        currentAction: 'Getting Fusion+ quote from 1inch for MEV protection...'
+      });
+      
+      // Get actual quote from 1inch
+      try {
+        const quote = await getFusionQuote({
+          srcToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH
+          dstToken: '0xA0b86a33E6417D05E60F0fe20b7A2a57f62fE1c6', // USDC
+          amount: investment.amount,
+          walletAddress: '0x742d35Cc6639C0532fBb9ea7e1ED', // Demo address
+          chainId: parseInt(investment.chain)
+        });
+        
+        updateAgent({
+          currentAction: 'Fusion+ quote received. Executing MEV-protected swap...'
+        });
+        await delay(1000);
+      } catch (error) {
+        updateAgent({
+          currentAction: 'Using Limit Order Protocol for execution...'
+        });
+      }
+
+      // Phase 4: Execution
+      updateAgent({
+        currentAction: 'Executing trade with optimal slippage protection...',
+        trades: 1
+      });
+      await delay(2000);
+
+      // Phase 5: Monitoring
+      updateAgent({
+        status: 'monitoring',
+        currentAction: 'Monitoring position and market conditions...',
+        pnl: '+0.15%'
+      });
+
+      // Simulate ongoing monitoring and trading
+      monitorPosition(agentId);
+
+      toast({
+        title: "Eliza Agent Activated",
+        description: `Agent started for ${investment.amount} ${investment.tokenType} investment`,
+      });
+
+    } catch (error) {
+      updateAgent({
+        status: 'idle',
+        currentAction: 'Error occurred. Agent paused for review.'
+      });
+      
+      toast({
+        title: "Agent Error",
+        description: "Eliza agent encountered an issue and has been paused",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const monitorPosition = (agentId: string) => {
+    const interval = setInterval(() => {
+      setAgents(prev => prev.map(agent => {
+        if (agent.id === agentId && agent.status === 'monitoring') {
+          const actions = [
+            'Monitoring market volatility and rebalancing opportunities...',
+            'Scanning for arbitrage opportunities across chains...',
+            'Optimizing position size based on risk parameters...',
+            'Checking for MEV opportunities in mempool...',
+            'Analyzing on-chain signals for position adjustments...'
+          ];
+          
+          const randomPnl = (Math.random() * 2 - 0.5).toFixed(2);
+          const currentPnl = parseFloat(agent.pnl.replace(/[+%]/g, ''));
+          const newPnl = (currentPnl + parseFloat(randomPnl)).toFixed(2);
+          
+          return {
+            ...agent,
+            currentAction: actions[Math.floor(Math.random() * actions.length)],
+            pnl: `${newPnl.startsWith('-') ? '' : '+'}${newPnl}%`,
+            trades: agent.trades + (Math.random() > 0.7 ? 1 : 0),
+            lastActivity: new Date()
+          };
+        }
+        return agent;
+      }));
+    }, 5000);
+
+    // Clean up interval after 5 minutes
+    setTimeout(() => clearInterval(interval), 300000);
+  };
+
+  const getStatusIcon = (status: ElizaAgentStatus['status']) => {
+    switch (status) {
+      case 'analyzing':
+        return <Activity className="h-4 w-4 text-blue-500 animate-pulse" />;
+      case 'executing':
+        return <Zap className="h-4 w-4 text-yellow-500 animate-pulse" />;
+      case 'monitoring':
+        return <Target className="h-4 w-4 text-green-500" />;
+      default:
+        return <Bot className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const getStatusColor = (status: ElizaAgentStatus['status']) => {
+    switch (status) {
+      case 'analyzing':
+        return 'bg-blue-500';
+      case 'executing':
+        return 'bg-yellow-500';
+      case 'monitoring':
+        return 'bg-green-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  if (agents.length === 0) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5" />
+            Eliza Agents
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-center py-8">
+            No active agents. Start an investment to deploy Eliza.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {agents.map((agent) => (
+        <Card key={agent.id} className="w-full">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                {getStatusIcon(agent.status)}
+                Eliza Agent #{agent.id.split('_')[1]}
+              </CardTitle>
+              <Badge className={getStatusColor(agent.status)}>
+                {agent.status}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Investment</p>
+                <p className="font-medium">{agent.investment.amount} {agent.investment.tokenType}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Chain</p>
+                <p className="font-medium">{SUPPORTED_CHAINS[agent.investment.chain] || agent.investment.chain}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Trades</p>
+                <p className="font-medium">{agent.trades}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">P&L</p>
+                <p className={`font-medium ${agent.pnl.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
+                  {agent.pnl}
+                </p>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-blue-500" />
+                <p className="text-sm font-medium">Current Activity:</p>
+              </div>
+              <p className="text-sm text-muted-foreground pl-6">
+                {agent.currentAction}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Last activity: {agent.lastActivity.toLocaleTimeString()}</span>
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>MEV Protected</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
