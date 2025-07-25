@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Info, TrendingUp, AlertTriangle, CheckCircle, DollarSign } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Info, TrendingUp, AlertTriangle, CheckCircle, DollarSign, Upload, FileText, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export function InvestSection() {
@@ -17,12 +19,20 @@ export function InvestSection() {
     tokenType: "",
     lockPeriod: "",
     strategy: "",
+    withdrawChain: "",
+    withdrawCurrency: "",
     autoLockIncrease: false
   });
 
   const [gasEstimate, setGasEstimate] = useState("~$12.50");
+  const [withdrawGasEstimate, setWithdrawGasEstimate] = useState("~$8.30");
   const [minReturn, setMinReturn] = useState("0.00");
+  const [tokenReturn, setTokenReturn] = useState("0.00");
   const [riskLevel, setRiskLevel] = useState("Medium");
+  const [comparisonStrategy, setComparisonStrategy] = useState("");
+  const [comparisonReturn, setComparisonReturn] = useState("0.00");
+  const [signalFile, setSignalFile] = useState<File | null>(null);
+  const [signalData, setSignalData] = useState("");
   const { toast } = useToast();
 
   const chains = [
@@ -49,7 +59,7 @@ export function InvestSection() {
     { period: "12 Months", multiplier: 1.65 }
   ];
 
-  const updateCalculations = (strategy: string, amount: string, lockPeriod: string) => {
+  const updateCalculations = (strategy: string, amount: string, lockPeriod: string, tokenType: string = "") => {
     const selectedStrategy = strategies.find(s => s.name === strategy);
     const selectedPeriod = lockPeriods.find(p => p.period === lockPeriod);
     
@@ -59,6 +69,33 @@ export function InvestSection() {
       const calculatedReturn = (parseFloat(amount) * adjustedReturn / 100).toFixed(2);
       setMinReturn(calculatedReturn);
       setRiskLevel(selectedStrategy.risk);
+      
+      // Calculate token return (same currency as investment)
+      const maxReturn = Math.min(parseFloat(amount) * 2, parseFloat(calculatedReturn) * 1.5);
+      setTokenReturn(maxReturn.toFixed(2));
+    }
+  };
+
+  const updateComparisonCalculations = (strategy: string, amount: string, lockPeriod: string) => {
+    const selectedStrategy = strategies.find(s => s.name === strategy);
+    const selectedPeriod = lockPeriods.find(p => p.period === lockPeriod);
+    
+    if (selectedStrategy && selectedPeriod && amount) {
+      const baseReturn = parseFloat(selectedStrategy.minReturn.replace('%', ''));
+      const adjustedReturn = baseReturn * selectedPeriod.multiplier;
+      const calculatedReturn = (parseFloat(amount) * adjustedReturn / 100).toFixed(2);
+      setComparisonReturn(calculatedReturn);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSignalFile(file);
+      toast({
+        title: "Signal File Uploaded",
+        description: `${file.name} uploaded successfully`,
+      });
     }
   };
 
@@ -180,6 +217,41 @@ export function InvestSection() {
               </Select>
             </div>
 
+            {/* Withdraw Chain and Currency */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="withdrawChain">Withdraw Chain</Label>
+                <Select onValueChange={(value) => handleInputChange("withdrawChain", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select withdraw chain" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {chains.map((chain) => (
+                      <SelectItem key={chain} value={chain}>
+                        {chain}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="withdrawCurrency">Withdraw Currency</Label>
+                <Select onValueChange={(value) => handleInputChange("withdrawCurrency", value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="crypto">Same as Investment</SelectItem>
+                    <SelectItem value="usdc">USDC</SelectItem>
+                    <SelectItem value="usdt">USDT</SelectItem>
+                    <SelectItem value="dai">DAI</SelectItem>
+                    <SelectItem value="eth">ETH</SelectItem>
+                    <SelectItem value="btc">BTC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             {/* Strategy Selection */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -191,25 +263,118 @@ export function InvestSection() {
                       Not sure which strategy?
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Strategy Recommendation</DialogTitle>
+                      <DialogTitle>Strategy Recommendation & Comparison</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
-                        <h3 className="font-semibold text-primary mb-2">Recommended: Meta Model Blend</h3>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          Based on current market conditions and your profile
-                        </p>
-                        <div className="flex gap-2 mb-2">
-                          <Badge className="bg-warning text-warning-foreground">Medium Risk</Badge>
-                          <Badge variant="outline">9.8% Min Return</Badge>
+                    <Tabs defaultValue="recommendation" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="recommendation">Recommendation</TabsTrigger>
+                        <TabsTrigger value="comparison">Compare Strategies</TabsTrigger>
+                      </TabsList>
+                      
+                      <TabsContent value="recommendation" className="space-y-4">
+                        <div className="p-4 bg-primary/10 rounded-lg border border-primary/20">
+                          <h3 className="font-semibold text-primary mb-2">Recommended: Meta Model Blend</h3>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Based on current market conditions and your investment profile
+                          </p>
+                          <div className="flex gap-2 mb-3">
+                            <Badge className="bg-warning text-warning-foreground">Medium Risk</Badge>
+                            <Badge variant="outline">9.8% Min Return</Badge>
+                          </div>
+                          
+                          <div className="space-y-3 text-sm">
+                            <div>
+                              <h4 className="font-medium mb-1">Why this strategy?</h4>
+                              <p className="text-muted-foreground">
+                                Combines multiple AI models for optimal market adaptation. Historical data shows 
+                                85% success rate in volatile markets with minimal drawdown risk.
+                              </p>
+                            </div>
+                            
+                            {investmentData.amount && (
+                              <div className="border-t pt-3">
+                                <h4 className="font-medium mb-2">Your Investment Calculation</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <span className="text-muted-foreground">Investment:</span>
+                                    <div className="font-medium">${investmentData.amount}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Min Return:</span>
+                                    <div className="font-medium text-success">${minReturn}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Max Return (2x cap):</span>
+                                    <div className="font-medium text-primary">${tokenReturn}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Same Token Return:</span>
+                                    <div className="font-medium">{tokenReturn} {investmentData.tokenType || 'tokens'}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-sm">
-                          Optimal for current volatility levels with balanced risk-reward ratio.
-                        </p>
-                      </div>
-                    </div>
+                      </TabsContent>
+                      
+                      <TabsContent value="comparison" className="space-y-4">
+                        <div className="space-y-3">
+                          <Label>Compare with another strategy</Label>
+                          <Select onValueChange={(value) => {
+                            setComparisonStrategy(value);
+                            updateComparisonCalculations(value, investmentData.amount, investmentData.lockPeriod);
+                          }}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select strategy to compare" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {strategies.filter(s => s.name !== "Meta Model Blend").map((strategy) => (
+                                <SelectItem key={strategy.name} value={strategy.name}>
+                                  {strategy.name} - {strategy.minReturn}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {comparisonStrategy && investmentData.amount && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card className="p-3 bg-primary/5 border-primary/20">
+                              <h4 className="font-medium text-primary mb-2">Recommended: Meta Model Blend</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span>Return:</span>
+                                  <span className="font-medium">${minReturn}</span>
+                                </div>
+                                 <div className="flex justify-between">
+                                   <span>Risk:</span>
+                                   <Badge className="bg-warning text-warning-foreground text-xs">Medium</Badge>
+                                 </div>
+                              </div>
+                            </Card>
+                            
+                            <Card className="p-3 bg-muted/5 border-border">
+                              <h4 className="font-medium mb-2">{comparisonStrategy}</h4>
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span>Return:</span>
+                                  <span className="font-medium">${comparisonReturn}</span>
+                                </div>
+                                 <div className="flex justify-between">
+                                   <span>Risk:</span>
+                                   <Badge className={`${getRiskColor(strategies.find(s => s.name === comparisonStrategy)?.risk || "Medium")} text-xs`}>
+                                     {strategies.find(s => s.name === comparisonStrategy)?.risk}
+                                   </Badge>
+                                 </div>
+                              </div>
+                            </Card>
+                          </div>
+                        )}
+                      </TabsContent>
+                    </Tabs>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -237,7 +402,7 @@ export function InvestSection() {
             {/* Auto Lock Increase Toggle */}
             <div className="flex items-center justify-between p-4 bg-muted/20 rounded-lg border border-border">
               <div className="space-y-1">
-                <Label htmlFor="autoLock">Automatic Lock-Up Increase</Label>
+                <Label htmlFor="autoLock">Automatic Lock-Up Increase (Recommended)</Label>
                 <p className="text-sm text-muted-foreground">
                   Prevent trades during bull market signals for maximum gains
                 </p>
@@ -255,9 +420,9 @@ export function InvestSection() {
                 <CardContent className="p-4">
                   <h3 className="font-semibold mb-3 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-success" />
-                    Investment Summary
+                    Investment Overview
                   </h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
                       <div className="text-muted-foreground">Strategy</div>
                       <div className="font-medium">{investmentData.strategy}</div>
@@ -267,12 +432,31 @@ export function InvestSection() {
                       <Badge className={getRiskColor(riskLevel)}>{riskLevel}</Badge>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Guaranteed Return</div>
+                      <div className="text-muted-foreground">Guaranteed Return (USD)</div>
                       <div className="font-medium text-success">${minReturn}</div>
                     </div>
                     <div>
-                      <div className="text-muted-foreground">Gas Fee</div>
+                      <div className="text-muted-foreground">Same Token Return</div>
+                      <div className="font-medium text-primary">{tokenReturn} {investmentData.tokenType || 'tokens'}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Investment Gas Fee</div>
                       <div className="font-medium">{gasEstimate}</div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground">Withdrawal Gas Fee</div>
+                      <div className="font-medium">{withdrawGasEstimate}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 bg-warning/10 rounded-lg border border-warning/20">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-warning mt-0.5" />
+                      <div className="text-xs text-muted-foreground">
+                        <strong>Return Cap Policy:</strong> Maximum return is capped at 2x your investment amount. 
+                        This ensures guaranteed payouts for all investors even in bear markets. If market returns 
+                        3x, you receive 2x to help cover losses during market downturns and maintain sustainability.
+                      </div>
                     </div>
                   </div>
                 </CardContent>
