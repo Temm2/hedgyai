@@ -11,14 +11,24 @@ interface Investment {
   amount: string;
   chain: string;
   tokenType: string;
+  withdrawChain: string;
+  withdrawCurrency: string;
+  lockPeriod: string;
+  strategy: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  guaranteedReturn: string;
+  minReturn: string;
+  gasFee: string;
   timestamp: Date;
   status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
+  endTimestamp?: Date;
+  finalPnl?: string;
 }
 
 interface ElizaAgentStatus {
   id: string;
-  status: 'idle' | 'analyzing' | 'executing' | 'monitoring';
+  status: 'idle' | 'analyzing' | 'executing' | 'monitoring' | 'completed';
   currentAction: string;
   investment: Investment;
   trades: number;
@@ -159,18 +169,40 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
   };
 
   const monitorPosition = (agentId: string) => {
+    const agent = agents.find(a => a.id === agentId);
+    if (!agent) return;
+
+    const lockPeriodMs = parseInt(agent.investment.lockPeriod) * 24 * 60 * 60 * 1000;
+    const endTime = new Date(agent.investment.timestamp.getTime() + lockPeriodMs);
+    
     const interval = setInterval(() => {
+      const now = new Date();
+      
       setAgents(prev => prev.map(agent => {
         if (agent.id === agentId && agent.status === 'monitoring') {
+          // Check if lock period has ended
+          if (now >= endTime) {
+            clearInterval(interval);
+            return {
+              ...agent,
+              status: 'completed' as const,
+              currentAction: 'Lock period completed. Investment ready for withdrawal.',
+              lastActivity: new Date()
+            };
+          }
+
           const actions = [
             'Monitoring market volatility and rebalancing opportunities...',
             'Scanning for arbitrage opportunities across chains...',
             'Optimizing position size based on risk parameters...',
             'Checking for MEV opportunities in mempool...',
-            'Analyzing on-chain signals for position adjustments...'
+            'Analyzing on-chain signals for position adjustments...',
+            'Executing cross-chain arbitrage via 1inch Fusion+...',
+            'Managing limit orders for optimal execution...',
+            'Protecting against MEV attacks...'
           ];
           
-          const randomPnl = (Math.random() * 2 - 0.5).toFixed(2);
+          const randomPnl = (Math.random() * 1.5 - 0.3).toFixed(2);
           const currentPnl = parseFloat(agent.pnl.replace(/[+%]/g, ''));
           const newPnl = (currentPnl + parseFloat(randomPnl)).toFixed(2);
           
@@ -178,16 +210,25 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
             ...agent,
             currentAction: actions[Math.floor(Math.random() * actions.length)],
             pnl: `${newPnl.startsWith('-') ? '' : '+'}${newPnl}%`,
-            trades: agent.trades + (Math.random() > 0.7 ? 1 : 0),
+            trades: agent.trades + (Math.random() > 0.8 ? 1 : 0),
             lastActivity: new Date()
           };
         }
         return agent;
       }));
-    }, 5000);
+    }, 3000);
 
-    // Clean up interval after 5 minutes
-    setTimeout(() => clearInterval(interval), 300000);
+    // Clean up interval when lock period ends
+    setTimeout(() => {
+      clearInterval(interval);
+      setAgents(prev => prev.map(agent => 
+        agent.id === agentId ? {
+          ...agent,
+          status: 'completed' as const,
+          currentAction: 'Lock period completed. Investment ready for withdrawal.'
+        } : agent
+      ));
+    }, lockPeriodMs);
   };
 
   const getStatusIcon = (status: ElizaAgentStatus['status']) => {
@@ -198,6 +239,8 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
         return <Zap className="h-4 w-4 text-yellow-500 animate-pulse" />;
       case 'monitoring':
         return <Target className="h-4 w-4 text-green-500" />;
+      case 'completed':
+        return <TrendingUp className="h-4 w-4 text-purple-500" />;
       default:
         return <Bot className="h-4 w-4 text-gray-500" />;
     }
@@ -211,6 +254,8 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
         return 'bg-yellow-500';
       case 'monitoring':
         return 'bg-green-500';
+      case 'completed':
+        return 'bg-purple-500';
       default:
         return 'bg-gray-500';
     }

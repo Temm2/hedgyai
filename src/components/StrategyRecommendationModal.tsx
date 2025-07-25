@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -121,12 +121,14 @@ export function StrategyRecommendationModal({ onStrategySelect }: StrategyRecomm
                     <p className="font-semibold">{recommended.recommendedTokens.join(", ")}</p>
                   </div>
                 </div>
-                <Button 
-                  className="w-full" 
-                  onClick={() => onStrategySelect(recommended.name)}
-                >
-                  Select This Strategy
-                </Button>
+        <DialogClose asChild>
+          <Button 
+            className="w-full" 
+            onClick={() => onStrategySelect(recommended.name)}
+          >
+            Select This Strategy
+          </Button>
+        </DialogClose>
               </div>
             </CardContent>
           </Card>
@@ -160,13 +162,15 @@ export function StrategyRecommendationModal({ onStrategySelect }: StrategyRecomm
                         <Clock className="w-3 h-3" />
                         {strategy.lockPeriod}
                       </span>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => onStrategySelect(strategy.name)}
-                      >
-                        Select
-                      </Button>
+                      <DialogClose asChild>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => onStrategySelect(strategy.name)}
+                        >
+                          Select
+                        </Button>
+                      </DialogClose>
                     </div>
                   </CardContent>
                 </Card>

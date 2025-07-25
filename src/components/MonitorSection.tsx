@@ -2,15 +2,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Activity, TrendingUp, DollarSign, Bot } from "lucide-react";
 import { ElizaAgent } from "@/components/ElizaAgent";
+import { MultiChainWallet } from "@/components/MultiChainWallet";
 
 interface Investment {
   id: string;
   amount: string;
   chain: string;
   tokenType: string;
+  withdrawChain: string;
+  withdrawCurrency: string;
+  lockPeriod: string;
+  strategy: string;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  guaranteedReturn: string;
+  minReturn: string;
+  gasFee: string;
   timestamp: Date;
   status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
+  endTimestamp?: Date;
+  finalPnl?: string;
 }
 
 interface MonitorSectionProps {
@@ -92,12 +103,19 @@ export function MonitorSection({ investments = [] }: MonitorSectionProps) {
           </Card>
         </div>
 
-        {/* Live Agent Activity */}
-        <div className="mb-8">
-          <ElizaAgent 
-            investments={investments}
-            onAgentUpdate={handleAgentUpdate}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Multi-Chain Wallet */}
+          <div className="lg:col-span-1">
+            <MultiChainWallet />
+          </div>
+          
+          {/* Agent Monitoring */}
+          <div className="lg:col-span-2">
+            <ElizaAgent 
+              investments={investments}
+              onAgentUpdate={handleAgentUpdate}
+            />
+          </div>
         </div>
       </div>
     </div>
