@@ -5,10 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Bot, TrendingUp, DollarSign, Clock, Trash2 } from "lucide-react";
+import { Bot, TrendingUp, DollarSign, Clock, Trash2, Activity } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { SUPPORTED_CHAINS } from "@/hooks/use-oneinch";
-import { ElizaAgent } from "@/components/ElizaAgent";
 
 interface Investment {
   id: string;
@@ -16,18 +14,25 @@ interface Investment {
   chain: string;
   tokenType: string;
   timestamp: Date;
-  status: 'pending' | 'active' | 'completed';
+  status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
+  endTimestamp?: Date;
+  finalPnl?: string;
 }
 
-export function InvestSection() {
+interface InvestSectionProps {
+  investments: Investment[];
+  setInvestments: React.Dispatch<React.SetStateAction<Investment[]>>;
+}
+
+export function InvestSection({ investments, setInvestments }: InvestSectionProps) {
   const [investmentData, setInvestmentData] = useState({
     chain: "1", // Ethereum mainnet
     amount: "",
     tokenType: "ETH"
   });
   
-  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [investmentHistory, setInvestmentHistory] = useState<Investment[]>([]);
   const { toast } = useToast();
 
   const chains = [
@@ -74,15 +79,25 @@ export function InvestSection() {
 
     toast({
       title: "Investment Added",
-      description: "Eliza agent will start managing your investment shortly.",
+      description: "Hedgy agent will start managing your investment shortly.",
     });
   };
 
   const removeInvestment = (id: string) => {
+    const investment = investments.find(inv => inv.id === id);
+    if (investment) {
+      const closedInvestment = {
+        ...investment,
+        status: 'closed' as const,
+        endTimestamp: new Date(),
+        finalPnl: '+0.25%' // Mock final PnL
+      };
+      setInvestmentHistory(prev => [...prev, closedInvestment]);
+    }
     setInvestments(prev => prev.filter(inv => inv.id !== id));
     toast({
-      title: "Investment Removed",
-      description: "Investment has been removed from your portfolio.",
+      title: "Investment Closed",
+      description: "Investment has been closed and moved to history.",
     });
   };
 
@@ -163,24 +178,24 @@ export function InvestSection() {
                 </div>
 
                 {/* Invest Button */}
-                <Button 
-                  className="w-full"
-                  onClick={handleInvestNow}
-                  disabled={!investmentData.amount || !investmentData.chain || !investmentData.tokenType}
-                >
-                  <Bot className="w-5 h-5 mr-2" />
-                  Start Eliza Agent
-                </Button>
+                  <Button 
+                    className="w-full"
+                    onClick={handleInvestNow}
+                    disabled={!investmentData.amount || !investmentData.chain || !investmentData.tokenType}
+                  >
+                    <Bot className="w-5 h-5 mr-2" />
+                    Start Hedgy Agent
+                  </Button>
               </CardContent>
             </Card>
 
-            {/* Portfolio */}
+            {/* Active Portfolio */}
             {investments.length > 0 && (
               <Card className="mt-6 bg-gradient-card backdrop-blur-glass border-primary/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-primary" />
-                    Your Portfolio
+                    Active Investments
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -209,6 +224,7 @@ export function InvestSection() {
                             size="sm"
                             variant="ghost"
                             onClick={() => removeInvestment(investment.id)}
+                            title="Close Investment"
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -219,14 +235,59 @@ export function InvestSection() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Investment History */}
+            {investmentHistory.length > 0 && (
+              <Card className="mt-6 bg-gradient-card backdrop-blur-glass border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-primary" />
+                    Investment History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {investmentHistory.map((investment) => (
+                      <div key={investment.id} className="flex items-center justify-between p-3 bg-background/30 rounded-lg border border-muted">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="border-muted-foreground/30">
+                            closed
+                          </Badge>
+                          <div>
+                            <p className="font-medium">{investment.amount} {investment.tokenType}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {chains.find(c => c.id === investment.chain)?.name}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-medium ${investment.finalPnl?.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>
+                            {investment.finalPnl}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {investment.endTimestamp?.toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          {/* Eliza Agents */}
-          <div>
-            <ElizaAgent 
-              investments={investments}
-              onAgentUpdate={handleAgentUpdate}
-            />
+          {/* Agent Monitor Link */}
+          <div className="flex items-center justify-center">
+            <Card className="bg-gradient-card backdrop-blur-glass border-primary/20 p-6 text-center">
+              <h3 className="text-lg font-semibold mb-2">Live Agent Activity</h3>
+              <p className="text-muted-foreground mb-4">
+                Monitor your Hedgy agents in real-time
+              </p>
+              <Button variant="outline" className="w-full">
+                <Activity className="w-4 h-4 mr-2" />
+                View Agent Monitor
+              </Button>
+            </Card>
           </div>
         </div>
       </div>

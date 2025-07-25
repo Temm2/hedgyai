@@ -5,9 +5,22 @@ import { InvestSection } from "@/components/InvestSection";
 import { MonitorSection } from "@/components/MonitorSection";
 import { DashboardSection } from "@/components/DashboardSection";
 
+interface Investment {
+  id: string;
+  amount: string;
+  chain: string;
+  tokenType: string;
+  timestamp: Date;
+  status: 'pending' | 'active' | 'completed' | 'closed';
+  elizaId?: string;
+  endTimestamp?: Date;
+  finalPnl?: string;
+}
+
 const Index = () => {
   const [darkMode, setDarkMode] = useState(true);
   const [currentSection, setCurrentSection] = useState("about");
+  const [investments, setInvestments] = useState<Investment[]>([]);
 
   useEffect(() => {
     // Apply theme class to document
@@ -29,9 +42,9 @@ const Index = () => {
       case "about":
         return <AboutSection />;
       case "invest":
-        return <InvestSection />;
+        return <InvestSection investments={investments} setInvestments={setInvestments} />;
       case "monitor":
-        return <MonitorSection />;
+        return <MonitorSection investments={investments} />;
       case "dashboard":
         return <DashboardSection />;
       default:

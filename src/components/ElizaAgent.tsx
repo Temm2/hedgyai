@@ -12,7 +12,7 @@ interface Investment {
   chain: string;
   tokenType: string;
   timestamp: Date;
-  status: 'pending' | 'active' | 'completed';
+  status: 'pending' | 'active' | 'completed' | 'closed';
   elizaId?: string;
 }
 
@@ -140,7 +140,7 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
       monitorPosition(agentId);
 
       toast({
-        title: "Eliza Agent Activated",
+        title: "Hedgy Agent Activated", 
         description: `Agent started for ${investment.amount} ${investment.tokenType} investment`,
       });
 
@@ -152,7 +152,7 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
       
       toast({
         title: "Agent Error",
-        description: "Eliza agent encountered an issue and has been paused",
+        description: "Hedgy agent encountered an issue and has been paused",
         variant: "destructive"
       });
     }
@@ -222,13 +222,13 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Bot className="h-5 w-5" />
-            Eliza Agents
+            Hedgy Agents
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-center py-8">
-            No active agents. Start an investment to deploy Eliza.
-          </p>
+        <p className="text-muted-foreground text-center py-8">
+          No active agents. Start an investment to deploy Hedgy.
+        </p>
         </CardContent>
       </Card>
     );
@@ -242,7 +242,7 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 {getStatusIcon(agent.status)}
-                Eliza Agent #{agent.id.split('_')[1]}
+                Hedgy Agent #{agent.id.split('_')[1]}
               </CardTitle>
               <Badge className={getStatusColor(agent.status)}>
                 {agent.status}
