@@ -1,10 +1,4 @@
 import { ethers } from 'ethers';
-import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { ECPairFactory, ECPairInterface } from 'ecpair';
-
-// Initialize ECPair factory
-const ECPair = ECPairFactory(ecc);
 
 export interface ProgrammaticWallet {
   address: string;
@@ -58,26 +52,30 @@ export class EthereumProgrammaticWallet {
 }
 
 export class BitcoinProgrammaticWallet {
-  private keyPair: ECPairInterface;
-  private network: bitcoin.Network;
+  private address: string;
+  private privateKey: string;
 
-  constructor(privateKey?: Buffer) {
-    this.network = bitcoin.networks.bitcoin;
-    
-    if (privateKey) {
-      this.keyPair = ECPair.fromPrivateKey(privateKey, { network: this.network });
-    } else {
-      // Generate random key pair for demo
-      this.keyPair = ECPair.makeRandom({ network: this.network });
-    }
+  constructor(privateKey?: string) {
+    // For demo purposes, generate mock Bitcoin wallet
+    this.privateKey = privateKey || this.generateMockPrivateKey();
+    this.address = this.generateAddressFromPrivateKey(this.privateKey);
+  }
+
+  private generateMockPrivateKey(): string {
+    // Generate a mock private key for demo (not cryptographically secure)
+    return Array.from({ length: 64 }, () => 
+      Math.floor(Math.random() * 16).toString(16)
+    ).join('');
+  }
+
+  private generateAddressFromPrivateKey(privateKey: string): string {
+    // Generate a mock Bitcoin address from private key (for demo only)
+    const hash = privateKey.slice(0, 20);
+    return `bc1q${hash}${Math.random().toString(36).substr(2, 9)}`;
   }
 
   getAddress(): string {
-    const { address } = bitcoin.payments.p2wpkh({ 
-      pubkey: this.keyPair.publicKey, 
-      network: this.network 
-    });
-    return address || '';
+    return this.address;
   }
 
   async getBalance(): Promise<string> {
@@ -89,8 +87,8 @@ export class BitcoinProgrammaticWallet {
   async sendTransaction(to: string, amount: number): Promise<string> {
     try {
       // For demo purposes, return mock transaction hash
-      // In production, you'd build and broadcast the transaction
-      const mockTxHash = bitcoin.crypto.sha256(Buffer.from(`${to}${amount}${Date.now()}`)).toString('hex');
+      const mockTxHash = this.generateMockTxHash(to, amount);
+      console.log(`BTC Transaction simulated: ${mockTxHash}`);
       return mockTxHash;
     } catch (error) {
       console.error('Failed to send BTC transaction:', error);
@@ -98,8 +96,21 @@ export class BitcoinProgrammaticWallet {
     }
   }
 
+  private generateMockTxHash(to: string, amount: number): string {
+    // Generate a realistic-looking Bitcoin transaction hash
+    const timestamp = Date.now().toString();
+    const data = `${to}${amount}${timestamp}${this.privateKey.slice(0, 8)}`;
+    // Simple hash simulation (not cryptographically secure)
+    let hash = '';
+    for (let i = 0; i < 64; i++) {
+      const char = data.charCodeAt(i % data.length);
+      hash += (char % 16).toString(16);
+    }
+    return hash;
+  }
+
   getPrivateKey(): string {
-    return this.keyPair.privateKey?.toString('hex') || '';
+    return this.privateKey;
   }
 }
 
