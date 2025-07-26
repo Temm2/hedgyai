@@ -35,13 +35,24 @@ export function useInvestmentCalculations(
       setCalculation(prev => ({ ...prev, isLoading: true, error: undefined }));
 
       try {
-        // Get real-time data from 1inch API
-        const [spotPrices, signals] = await Promise.all([
-          oneInchAPI.getTokenPrices([getTokenAddress(tokenType)], chainId),
-          tokenMetricsAPI.getSignals([tokenType])
-        ]);
-
-        const spotPrice = spotPrices[getTokenAddress(tokenType)]?.price || 0;
+        // Get real-time data from APIs with fallback handling
+        let spotPrice = 0;
+        let signals: any[] = [];
+        
+        try {
+          const spotPrices = await oneInchAPI.getTokenPrices([getTokenAddress(tokenType)], chainId);
+          spotPrice = spotPrices[getTokenAddress(tokenType)]?.price || getTokenFallbackPrice(tokenType);
+        } catch (error) {
+          console.warn('1inch price API failed, using fallback:', error);
+          spotPrice = getTokenFallbackPrice(tokenType);
+        }
+        
+        try {
+          signals = await tokenMetricsAPI.getSignals([tokenType]);
+        } catch (error) {
+          console.warn('TokenMetrics API failed, using demo signals:', error);
+          signals = []; // Will trigger fallback logic
+        }
         
         // Calculate returns based on real market data and signals
         const baseRate = getStrategyBaseRate(strategy);
@@ -162,4 +173,15 @@ function calculateFallbackReturn(amount: string, strategy: string, lockPeriod: s
   const lockMultiplier = parseInt(lockPeriod) / 30;
   const minReturn = parseFloat(amount) * (baseRate / 100) * lockMultiplier;
   return minReturn.toFixed(4);
+}
+
+function getTokenFallbackPrice(tokenType: string): number {
+  const fallbackPrices: Record<string, number> = {
+    'ETH': 2400,
+    'BTC': 42000,
+    'USDC': 1,
+    'USDT': 1,
+    'DAI': 1,
+  };
+  return fallbackPrices[tokenType] || 100;
 }
