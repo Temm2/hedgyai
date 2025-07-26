@@ -39,59 +39,94 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
 
     setIsLoading(true);
     try {
-      // Get real-time prices from 1inch for ETH and BTC (via WBTC)
-      const ethTokenAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
-      const wbtcTokenAddress = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
-      
-      let ethPrice = 0;
-      let btcPrice = 0;
-      
-      try {
-        const prices = await oneInchAPI.getTokenPrices([ethTokenAddress, wbtcTokenAddress], 1);
-        ethPrice = prices[ethTokenAddress] || 2400; // fallback
-        btcPrice = prices[wbtcTokenAddress] || 42000; // fallback
-      } catch (error) {
-        console.warn("Using fallback prices");
-        ethPrice = 2400;
-        btcPrice = 42000;
-      }
-
-      // Calculate real conversion rate ETH to BTC
-      const ethToBtcRate = ethPrice / btcPrice;
-      const btcToEthRate = btcPrice / ethPrice;
-      
       const amountNum = parseFloat(amount);
-      let toAmount = "0";
-      
-      if (fromToken === "ETH" && toToken === "BTC") {
-        toAmount = (amountNum * ethToBtcRate * 0.995).toFixed(8); // 0.5% fee
-      } else if (fromToken === "BTC" && toToken === "ETH") {
-        toAmount = (amountNum * btcToEthRate * 0.995).toFixed(6); // 0.5% fee
+      let quote: BridgeQuote | null = null;
+
+      // Check if it's a cross-protocol transaction (ETH <-> BTC)
+      const isCrossProtocol = (fromToken === "ETH" && toToken === "BTC") || (fromToken === "BTC" && toToken === "ETH");
+
+      if (isCrossProtocol) {
+        // Use Li.Fi for cross-protocol transactions (ETH <-> BTC)
+        const bridgeParams = {
+          fromChain: fromToken === "ETH" ? 1 : 0, // Ethereum mainnet or Bitcoin
+          toChain: toToken === "ETH" ? 1 : 0,
+          fromToken: fromToken === "ETH" ? "0x0000000000000000000000000000000000000000" : "BTC",
+          toToken: toToken === "ETH" ? "0x0000000000000000000000000000000000000000" : "BTC", 
+          fromAmount: (amountNum * (fromToken === "ETH" ? 1e18 : 1e8)).toString(), // Wei for ETH, satoshis for BTC
+          fromAddress: walletAddress,
+          toAddress: walletAddress
+        };
+
+        quote = await lifiAPI.getQuote(bridgeParams);
+      } else {
+        // Use 1inch Fusion+ for EVM chains and stablecoins
+        try {
+          const ethTokenAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+          const wbtcTokenAddress = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";
+          
+          // Get real-time quotes from 1inch Fusion+
+          const fusionQuote = await oneInchAPI.getFusionQuote({
+            srcToken: ethTokenAddress,
+            dstToken: wbtcTokenAddress,
+            amount: (amountNum * 1e18).toString(), // Convert to wei
+            walletAddress: walletAddress,
+            chainId: 1
+          });
+
+          quote = {
+            id: Date.now().toString(),
+            fromToken: fromToken,
+            toToken: toToken,
+            fromChain: 1, // Ethereum
+            toChain: 1, // Ethereum
+            fromAmount: amount,
+            toAmount: (parseInt(fusionQuote.dstAmount) / 1e8).toString(), // Convert from satoshis
+            estimatedGas: "0.002",
+            fees: fusionQuote.tx?.value ? (parseInt(fusionQuote.tx.value) / 1e18 * 0.005).toFixed(6) : "0.001",
+            route: fusionQuote,
+            executionTime: 120 // 2 minutes for Fusion+
+          };
+        } catch (error) {
+          console.warn("Fusion+ quote failed, using fallback calculation");
+          
+          // Fallback to price calculation
+          const prices = await oneInchAPI.getTokenPrices([
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
+          ], 1);
+          
+          const ethPrice = prices["0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"] || 3400;
+          const btcPrice = prices["0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"] || 68000;
+          
+          const rate = fromToken === "ETH" ? ethPrice / btcPrice : btcPrice / ethPrice;
+          const toAmount = (amountNum * rate * 0.995).toFixed(fromToken === "ETH" ? 8 : 6);
+          
+          quote = {
+            id: Date.now().toString(),
+            fromToken: fromToken,
+            toToken: toToken,
+            fromChain: 1,
+            toChain: 1,
+            fromAmount: amount,
+            toAmount: toAmount,
+            estimatedGas: "0.002",
+            fees: (amountNum * 0.005).toFixed(6),
+            route: { ethPrice, btcPrice, rate },
+            executionTime: 180
+          };
+        }
       }
 
-      // Create real quote with actual market data
-      const realQuote: BridgeQuote = {
-        id: Date.now().toString(),
-        fromToken: fromToken,
-        toToken: toToken,
-        fromChain: fromToken === "ETH" ? 1 : 0,
-        toChain: toToken === "ETH" ? 1 : 0,
-        fromAmount: amount,
-        toAmount: toAmount,
-        estimatedGas: fromToken === "ETH" ? "0.002" : "0.00015", // Real gas estimates
-        fees: (amountNum * 0.005).toFixed(6), // 0.5% bridge fee
-        route: { ethPrice, btcPrice, rate: fromToken === "ETH" ? ethToBtcRate : btcToEthRate },
-        executionTime: 180 // 3 minutes average
-      };
-
-      setQuote(realQuote);
-      
-      toast({
-        title: "Quote Generated",
-        description: `1 ${fromToken} = ${fromToken === "ETH" ? ethToBtcRate.toFixed(8) : btcToEthRate.toFixed(4)} ${toToken}`,
-      });
+      if (quote) {
+        setQuote(quote);
+        toast({
+          title: "Quote Generated",
+          description: `Best rate: ${quote.fromAmount} ${fromToken} → ${quote.toAmount} ${toToken}`,
+        });
+      }
 
     } catch (error) {
+      console.error("Quote error:", error);
       toast({
         title: "Quote Failed",
         description: "Unable to get bridge quote. Please try again.",
