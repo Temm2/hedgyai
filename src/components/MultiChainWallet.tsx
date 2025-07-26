@@ -6,11 +6,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Wallet, RefreshCw, Send, Download, ArrowUpDown, Bitcoin, Zap, X, Bot, Copy, Eye, EyeOff, QrCode, Plus } from "lucide-react";
+import { Wallet, RefreshCw, Send, Download, ArrowUpDown, Bitcoin, Zap, X, Bot, Copy, Eye, EyeOff, QrCode, Plus, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MetaMaskSDK } from "@metamask/sdk";
 import { AgentWalletManager, ProgrammaticWallet, WalletSecurity } from "@/lib/programmatic-wallets";
 import { AppConfig, UserSession, showConnect } from '@stacks/connect';
+import { BridgeInterface } from "./BridgeInterface";
+import { tokenMetricsAPI, type TokenSignal } from "@/lib/tokenmetrics-api";
 
 interface WalletBalance {
   chain: string;
@@ -49,6 +51,9 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
   const [agentWalletManager] = useState(() => new AgentWalletManager());
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [selectedTab, setSelectedTab] = useState("wallets");
+  const [showBridge, setShowBridge] = useState(false);
+  const [signals, setSignals] = useState<TokenSignal[]>([]);
+  const [isLoadingSignals, setIsLoadingSignals] = useState(false);
   const { toast } = useToast();
 
   // Initialize Hiro wallet configuration
@@ -80,6 +85,7 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
   useEffect(() => {
     if (isEthConnected || isHiroConnected || isAgentWalletActive) {
       loadBalances();
+      loadTradingSignals();
     }
   }, [isEthConnected, isHiroConnected, isAgentWalletActive]);
 
@@ -348,6 +354,20 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
     });
   };
 
+  const loadTradingSignals = async () => {
+    if (!hasAnyConnection) return;
+    
+    setIsLoadingSignals(true);
+    try {
+      const portfolioSignals = await tokenMetricsAPI.getPortfolioSignals();
+      setSignals(portfolioSignals);
+    } catch (error) {
+      console.error('Failed to load trading signals:', error);
+    } finally {
+      setIsLoadingSignals(false);
+    }
+  };
+
   const hasAnyConnection = isEthConnected || isHiroConnected || isAgentWalletActive;
 
   return (
@@ -366,27 +386,34 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
         </DialogHeader>
 
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="wallets">Wallets</TabsTrigger>
             <TabsTrigger value="tokens">Tokens</TabsTrigger>
+            <TabsTrigger value="signals">Signals</TabsTrigger>
             <TabsTrigger value="send">Send</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
 
           <TabsContent value="wallets" className="space-y-6">
-            {!hasAnyConnection ? (
-              <>
-                <p className="text-muted-foreground text-center">
-                  Connect your wallets to access cross-chain trading and investment features
-                </p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Ethereum Wallet */}
-                  <div className="p-4 border border-border rounded-lg space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Zap className="w-5 h-5" />
-                      <span className="font-medium">Ethereum Wallet</span>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Ethereum Wallet */}
+              <div className="p-4 border border-border rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5" />
+                  <span className="font-medium">Ethereum Wallet</span>
+                  {isEthConnected && <Badge variant="secondary" className="text-green-500">Connected</Badge>}
+                </div>
+                {isEthConnected ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
+                    </p>
+                    <Button size="sm" variant="ghost" onClick={() => copyToClipboard(ethAddress)}>
+                      <Copy className="w-3 h-3 mr-1" /> Copy
+                    </Button>
+                  </div>
+                ) : (
+                  <>
                     <p className="text-sm text-muted-foreground">
                       Connect via MetaMask for Ethereum and EVM chains
                     </p>
@@ -407,14 +434,28 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                         </>
                       )}
                     </Button>
-                  </div>
+                  </>
+                )}
+              </div>
 
-                  {/* Bitcoin Hiro Wallet */}
-                  <div className="p-4 border border-border rounded-lg space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Bitcoin className="w-5 h-5" />
-                      <span className="font-medium">Bitcoin Wallet</span>
-                    </div>
+              {/* Bitcoin Hiro Wallet */}
+              <div className="p-4 border border-border rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bitcoin className="w-5 h-5" />
+                  <span className="font-medium">Bitcoin Wallet</span>
+                  {isHiroConnected && <Badge variant="secondary" className="text-green-500">Connected</Badge>}
+                </div>
+                {isHiroConnected ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {hiroAddress.slice(0, 6)}...{hiroAddress.slice(-4)}
+                    </p>
+                    <Button size="sm" variant="ghost" onClick={() => copyToClipboard(hiroAddress)}>
+                      <Copy className="w-3 h-3 mr-1" /> Copy
+                    </Button>
+                  </div>
+                ) : (
+                  <>
                     <p className="text-sm text-muted-foreground">
                       Connect Hiro wallet for Bitcoin transactions
                     </p>
@@ -436,14 +477,34 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                         </>
                       )}
                     </Button>
-                  </div>
+                  </>
+                )}
+              </div>
 
-                  {/* Agent Wallet */}
-                  <div className="p-4 border border-border rounded-lg space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Bot className="w-5 h-5" />
-                      <span className="font-medium">Agent Wallets</span>
-                    </div>
+              {/* Agent Wallet */}
+              <div className="p-4 border border-border rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-5 h-5" />
+                  <span className="font-medium">Agent Wallets</span>
+                  {isAgentWalletActive && <Badge variant="secondary" className="text-green-500">Active</Badge>}
+                </div>
+                {isAgentWalletActive ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      {agentWallets.length} HD wallets created
+                    </p>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => setShowBridge(true)}
+                      className="w-full"
+                    >
+                      <ArrowUpDown className="w-3 h-3 mr-1" />
+                      Bridge
+                    </Button>
+                  </div>
+                ) : (
+                  <>
                     <p className="text-sm text-muted-foreground">
                       Create HD wallets for automated trading
                     </p>
@@ -465,97 +526,42 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                         </>
                       )}
                     </Button>
-                  </div>
-                </div>
-              </>
-            ) : (
+                  </>
+                )}
+              </div>
+            </div>
+
+            {hasAnyConnection && (
               <>
-                {/* Connected Wallets Status */}
-                <div className="space-y-3">
-                  {isEthConnected && (
-                    <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Zap className="w-5 h-5" />
-                        <div>
-                          <p className="font-medium">Ethereum</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm text-muted-foreground">
-                              {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
-                            </p>
-                            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(ethAddress)}>
-                              <Copy className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="text-green-500">
-                        Connected
-                      </Badge>
+                {/* Portfolio Overview */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Portfolio Overview</span>
+                      <Button size="sm" variant="ghost" onClick={loadBalances}>
+                        <RefreshCw className="w-4 h-4" />
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-center space-y-2">
+                      <p className="text-2xl font-bold">${getTotalUsdValue()}</p>
+                      <p className="text-sm text-muted-foreground">Total Portfolio Value</p>
                     </div>
-                  )}
-                  
-                  {isHiroConnected && (
-                    <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Bitcoin className="w-5 h-5" />
-                        <div>
-                          <p className="font-medium">Bitcoin (Hiro)</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm text-muted-foreground">
-                              {hiroAddress.slice(0, 6)}...{hiroAddress.slice(-4)}
-                            </p>
-                            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(hiroAddress)}>
-                              <Copy className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="text-green-500">
-                        Connected
-                      </Badge>
-                    </div>
-                  )}
-                  
-                  {isAgentWalletActive && (
-                    <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Bot className="w-5 h-5" />
-                        <div>
-                          <p className="font-medium">Agent Wallets</p>
-                          <p className="text-sm text-muted-foreground">
-                            {agentWallets.length} HD wallets active
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="secondary" className="text-blue-500">
-                        Active
-                      </Badge>
-                    </div>
-                  )}
-                </div>
+                  </CardContent>
+                </Card>
 
-                {/* Total Portfolio Value */}
-                <div className="text-center p-4 bg-background/30 rounded-lg">
-                  <p className="text-sm text-muted-foreground">Total Portfolio Value</p>
-                  <p className="text-2xl font-bold">${getTotalUsdValue()}</p>
-                </div>
-
-                {/* Chain Balances */}
+                {/* Balances */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Balances</h3>
-                    <Button size="sm" variant="ghost" onClick={loadBalances} disabled={isLoading}>
-                      <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    </Button>
-                  </div>
-                  
-                  {balances.map((balance) => (
-                    <div key={balance.chainId} className="flex items-center justify-between p-3 bg-background/20 rounded-lg">
+                  {balances.map((balance, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
                       <div className="flex items-center gap-3">
                         {balance.icon}
                         <div>
                           <p className="font-medium">{balance.chain}</p>
-                          <p className="text-sm text-muted-foreground">{balance.symbol}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {balance.address ? `${balance.address.slice(0, 6)}...${balance.address.slice(-4)}` : 'N/A'}
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -565,60 +571,20 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                     </div>
                   ))}
                 </div>
-
-                {/* Wallet Actions */}
-                <div className="grid grid-cols-3 gap-2">
-                  <Button size="sm" variant="outline" className="flex flex-col gap-1 h-auto py-3">
-                    <Download className="w-4 h-4" />
-                    <span className="text-xs">Receive</span>
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="flex flex-col gap-1 h-auto py-3"
-                    onClick={() => setSelectedTab("send")}
-                  >
-                    <Send className="w-4 h-4" />
-                    <span className="text-xs">Send</span>
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex flex-col gap-1 h-auto py-3">
-                    <ArrowUpDown className="w-4 h-4" />
-                    <span className="text-xs">Bridge</span>
-                  </Button>
-                </div>
-
-                {/* Disconnect Button */}
-                <Button 
-                  variant="outline" 
-                  className="w-full" 
-                  onClick={disconnectWallets}
-                >
-                  Disconnect All Wallets
-                </Button>
               </>
             )}
           </TabsContent>
 
-          <TabsContent value="tokens" className="space-y-6">
+          <TabsContent value="tokens" className="space-y-4">
             {tokenBalances.length > 0 ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">ERC-20 Tokens</h3>
-                  <Button size="sm" variant="outline">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Token
-                  </Button>
-                </div>
-                
                 {tokenBalances.map((token, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-background/20 rounded-lg">
+                  <div key={index} className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       {token.icon}
                       <div>
                         <p className="font-medium">{token.symbol}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {token.contractAddress?.slice(0, 6)}...{token.contractAddress?.slice(-4)}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{token.chain}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -629,105 +595,180 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                 ))}
               </div>
             ) : (
-              <div className="text-center p-8">
-                <p className="text-muted-foreground">No tokens found. Connect a wallet to view your tokens.</p>
-              </div>
+              <p className="text-center text-muted-foreground py-8">
+                {hasAnyConnection ? "No tokens found" : "Connect wallets to view tokens"}
+              </p>
             )}
           </TabsContent>
 
-          <TabsContent value="send" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Send Tokens</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="recipient">Recipient Address</Label>
-                  <Input id="recipient" placeholder="0x..." />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
-                  <Input id="amount" type="number" placeholder="0.0" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="token">Token</Label>
-                  <Input id="token" placeholder="ETH" />
-                </div>
-                <Button className="w-full" disabled={!hasAnyConnection}>
-                  Send Transaction
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="security" className="space-y-6">
-            {agentSecurity ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Security Center</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Mnemonic Phrase (Keep Secure)</Label>
-                    <div className="flex items-center gap-2">
-                      <Input 
-                        type={showPrivateKey ? "text" : "password"}
-                        value={agentSecurity.mnemonic}
-                        readOnly
-                        className="font-mono"
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowPrivateKey(!showPrivateKey)}
-                      >
-                        {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(agentSecurity.mnemonic)}
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Derivation Path</Label>
-                    <Input value={agentSecurity.derivationPath} readOnly />
-                  </div>
-
-                  {agentWallets.map((wallet, index) => (
-                    <div key={index} className="p-3 border border-border rounded-lg">
+          <TabsContent value="signals" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">Trading Signals</h3>
+              <Button size="sm" variant="ghost" onClick={loadTradingSignals}>
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {isLoadingSignals ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                <p className="text-muted-foreground">Loading TokenMetrics signals...</p>
+              </div>
+            ) : signals.length > 0 ? (
+              <div className="space-y-3">
+                {signals.map((signal, index) => (
+                  <Card key={index}>
+                    <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium">{wallet.symbol} Wallet</span>
-                        <Badge variant="outline">{wallet.chainId}</Badge>
-                      </div>
-                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">Address:</span>
-                          <span className="text-sm font-mono">{wallet.address}</span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => copyToClipboard(wallet.address)}
+                          <span className="font-medium">{signal.symbol}</span>
+                          <Badge 
+                            variant={signal.action === 'BUY' ? 'default' : signal.action === 'SELL' ? 'destructive' : 'secondary'}
                           >
-                            <Copy className="w-3 h-3" />
-                          </Button>
+                            {signal.action}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <TrendingUp className="w-4 h-4" />
+                          <span className="text-sm">{(signal.confidence * 100).toFixed(0)}%</span>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="text-center p-8">
-                <p className="text-muted-foreground">Initialize agent wallets to access security features.</p>
+                      <p className="text-sm text-muted-foreground mb-2">{signal.reason}</p>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Price:</span>
+                          <p className="font-medium">${signal.price.toFixed(2)}</p>
+                        </div>
+                        {signal.targetPrice && (
+                          <div>
+                            <span className="text-muted-foreground">Target:</span>
+                            <p className="font-medium">${signal.targetPrice.toFixed(2)}</p>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-muted-foreground">Risk:</span>
+                          <p className="font-medium">{signal.riskLevel}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                {hasAnyConnection ? "No trading signals available" : "Connect wallets to view signals"}
+              </p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="send" className="space-y-4">
+            {hasAnyConnection ? (
+              <div className="space-y-4">
+                <p className="text-muted-foreground">Send tokens and cross-chain transfers</p>
+                <Button className="w-full" onClick={() => setShowBridge(true)}>
+                  <ArrowUpDown className="w-4 h-4 mr-2" />
+                  Cross-Chain Bridge
+                </Button>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                Connect wallets to enable sending
+              </p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="security" className="space-y-4">
+            {isAgentWalletActive && agentSecurity ? (
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bot className="w-5 h-5" />
+                      Agent Wallet Security
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Mnemonic Phrase</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type={showPrivateKey ? "text" : "password"}
+                          value={agentSecurity.mnemonic}
+                          readOnly
+                          className="font-mono text-sm"
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setShowPrivateKey(!showPrivateKey)}
+                        >
+                          {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyToClipboard(agentSecurity.mnemonic)}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label>Derivation Path</Label>
+                      <Input
+                        value={agentSecurity.derivationPath}
+                        readOnly
+                        className="mt-1 font-mono text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Generated Wallets</Label>
+                      {agentWallets.map((wallet, index) => (
+                        <div key={index} className="p-3 bg-background/30 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{wallet.symbol} Wallet</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => copyToClipboard(wallet.address)}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {wallet.address}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                Initialize agent wallets to view security details
+              </p>
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Disconnect Button */}
+        {hasAnyConnection && (
+          <div className="pt-4 border-t">
+            <Button variant="outline" onClick={disconnectWallets} className="w-full">
+              Disconnect All Wallets
+            </Button>
+          </div>
+        )}
+
+        {/* Bridge Interface */}
+        <BridgeInterface 
+          isOpen={showBridge} 
+          onClose={() => setShowBridge(false)}
+          walletAddress={ethAddress || agentWallets.find(w => w.symbol === 'ETH')?.address}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -6,6 +6,7 @@ import { useOneInch, SUPPORTED_CHAINS } from "@/hooks/use-oneinch";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Activity, Zap, Clock, Target, TrendingUp, Shield } from "lucide-react";
 import { AgentWalletManager } from "@/lib/programmatic-wallets";
+import { tokenMetricsAPI } from "@/lib/tokenmetrics-api";
 
 interface Investment {
   id: string;
@@ -95,16 +96,32 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
     };
 
     try {
-      // Phase 1: Market Analysis
+      // Phase 1: Get Real Trading Signals
       updateAgent({
         status: 'analyzing',
-        currentAction: 'Analyzing market conditions and optimal entry points...'
+        currentAction: 'Fetching real-time signals from TokenMetrics API...'
       });
+      
+      try {
+        const signals = await tokenMetricsAPI.getSignals([investment.tokenType, 'ETH', 'BTC']);
+        const relevantSignal = signals.find(s => s.symbol === investment.tokenType.toUpperCase());
+        
+        if (relevantSignal) {
+          updateAgent({
+            currentAction: `TokenMetrics signal: ${relevantSignal.action} with ${(relevantSignal.confidence * 100).toFixed(0)}% confidence`
+          });
+        }
+      } catch (error) {
+        updateAgent({
+          currentAction: 'Using fallback market analysis...'
+        });
+      }
+      
       await delay(2000);
 
       // Phase 2: Strategy Selection
       updateAgent({
-        currentAction: 'Selecting optimal strategy based on market volatility...'
+        currentAction: 'Selecting optimal strategy based on market volatility and signals...'
       });
       await delay(1500);
 
