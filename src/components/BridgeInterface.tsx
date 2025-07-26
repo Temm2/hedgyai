@@ -17,34 +17,15 @@ interface BridgeInterfaceProps {
 }
 
 export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterfaceProps) {
-  const [fromChain, setFromChain] = useState("1"); // Ethereum
-  const [toChain, setToChain] = useState("137"); // Polygon
   const [fromToken, setFromToken] = useState("ETH");
-  const [toToken, setToToken] = useState("USDC");
+  const [toToken, setToToken] = useState("BTC");
   const [amount, setAmount] = useState("");
   const [quote, setQuote] = useState<BridgeQuote | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const { toast } = useToast();
 
-  const chains = [
-    { id: "1", name: "Ethereum", symbol: "ETH" },
-    { id: "137", name: "Polygon", symbol: "MATIC" },
-    { id: "56", name: "BSC", symbol: "BNB" },
-    { id: "42161", name: "Arbitrum", symbol: "ETH" },
-  ];
-
-  const tokens = {
-    "1": [
-      { symbol: "ETH", address: "0x0000000000000000000000000000000000000000" },
-      { symbol: "USDC", address: "0xA0b86a33E6441b8F5C3c7Ba2E86E93797AC3b2dF" },
-      { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7" },
-    ],
-    "137": [
-      { symbol: "MATIC", address: "0x0000000000000000000000000000000000001010" },
-      { symbol: "USDC", address: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174" },
-    ],
-  };
+  const supportedTokens = ["ETH", "BTC"];
 
   const getQuote = async () => {
     if (!amount || !walletAddress) {
@@ -58,33 +39,40 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
 
     setIsLoading(true);
     try {
-      const fromTokenAddress = tokens[fromChain as keyof typeof tokens]?.find(t => t.symbol === fromToken)?.address || "";
-      const toTokenAddress = tokens[toChain as keyof typeof tokens]?.find(t => t.symbol === toToken)?.address || "";
+      // Cross-chain swap from ETH to BTC or vice versa
+      const fromChainId = fromToken === "ETH" ? 1 : 0; // 1 for Ethereum, 0 for Bitcoin
+      const toChainId = toToken === "ETH" ? 1 : 0;
+      
+      // Use demo addresses for cross-chain bridge
+      const fromTokenAddress = fromToken === "ETH" ? "0x0000000000000000000000000000000000000000" : "bitcoin";
+      const toTokenAddress = toToken === "ETH" ? "0x0000000000000000000000000000000000000000" : "bitcoin";
 
-      // First try 1inch Fusion+ for better MEV protection
-      try {
-        const fusionQuote = await oneInchAPI.getFusionQuote({
-          srcToken: fromTokenAddress,
-          dstToken: toTokenAddress,
-          amount: amount,
-          walletAddress: walletAddress,
-          chainId: parseInt(fromChain)
-        });
-        
-        if (fusionQuote) {
-          toast({
-            title: "Fusion+ Route Available",
-            description: "MEV protection enabled via 1inch Fusion+",
+      // Try 1inch Fusion+ for ETH-based swaps
+      if (fromToken === "ETH" && toToken === "BTC") {
+        try {
+          const fusionQuote = await oneInchAPI.getFusionQuote({
+            srcToken: fromTokenAddress,
+            dstToken: toTokenAddress,
+            amount: amount,
+            walletAddress: walletAddress,
+            chainId: 1
           });
+          
+          if (fusionQuote) {
+            toast({
+              title: "Fusion+ Available",
+              description: "MEV protection enabled",
+            });
+          }
+        } catch (error) {
+          console.log("Fusion+ not available, using Li.Fi");
         }
-      } catch (error) {
-        console.log("Fusion+ not available, using Li.Fi");
       }
 
-      // Get Li.Fi quote
+      // Get Li.Fi cross-chain quote
       const bridgeParams: BridgeParams = {
-        fromChain: parseInt(fromChain),
-        toChain: parseInt(toChain),
+        fromChain: fromChainId,
+        toChain: toChainId,
         fromToken: fromTokenAddress,
         toToken: toTokenAddress,
         fromAmount: amount,
@@ -136,10 +124,7 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
   };
 
   const swapChains = () => {
-    const tempChain = fromChain;
     const tempToken = fromToken;
-    setFromChain(toChain);
-    setToChain(tempChain);
     setFromToken(toToken);
     setToToken(tempToken);
     setQuote(null);
@@ -147,7 +132,7 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowUpDown className="w-5 h-5" />
@@ -155,118 +140,82 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* From Section */}
-          <div className="space-y-3">
-            <Label>From</Label>
+          <div className="space-y-2">
+            <Label className="text-sm">From</Label>
             <div className="grid grid-cols-2 gap-2">
-              <Select value={fromChain} onValueChange={setFromChain}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {chains.map(chain => (
-                    <SelectItem key={chain.id} value={chain.id}>
-                      {chain.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={fromToken} onValueChange={setFromToken}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {tokens[fromChain as keyof typeof tokens]?.map(token => (
-                    <SelectItem key={token.symbol} value={token.symbol}>
-                      {token.symbol}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="ETH">ETH</SelectItem>
+                  <SelectItem value="BTC">BTC</SelectItem>
                 </SelectContent>
               </Select>
+              <Input
+                type="number"
+                placeholder="0.0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="h-9"
+              />
             </div>
-            <Input
-              type="number"
-              placeholder="0.0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
           </div>
 
           {/* Swap Button */}
           <div className="flex justify-center">
-            <Button variant="ghost" size="sm" onClick={swapChains}>
-              <ArrowUpDown className="w-4 h-4" />
+            <Button variant="ghost" size="sm" onClick={swapChains} className="h-8 w-8 p-0">
+              <ArrowUpDown className="w-3 h-3" />
             </Button>
           </div>
 
           {/* To Section */}
-          <div className="space-y-3">
-            <Label>To</Label>
+          <div className="space-y-2">
+            <Label className="text-sm">To</Label>
             <div className="grid grid-cols-2 gap-2">
-              <Select value={toChain} onValueChange={setToChain}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {chains.map(chain => (
-                    <SelectItem key={chain.id} value={chain.id}>
-                      {chain.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={toToken} onValueChange={setToToken}>
-                <SelectTrigger>
+                <SelectTrigger className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {tokens[toChain as keyof typeof tokens]?.map(token => (
-                    <SelectItem key={token.symbol} value={token.symbol}>
-                      {token.symbol}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="ETH">ETH</SelectItem>
+                  <SelectItem value="BTC">BTC</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="p-3 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                {quote ? `≈ ${quote.toAmount} ${toToken}` : "Enter amount for quote"}
-              </p>
+              <div className="p-2 bg-muted rounded text-sm text-muted-foreground h-9 flex items-center">
+                {quote ? `≈ ${quote.toAmount}` : "0.0"}
+              </div>
             </div>
           </div>
 
           {/* Quote Details */}
           {quote && (
-            <Card>
-              <CardContent className="p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Estimated Time:</span>
-                  <span>{Math.ceil(quote.executionTime / 60)} minutes</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Gas Fee:</span>
-                  <span>≈ {quote.estimatedGas} ETH</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Bridge Fee:</span>
-                  <span>{quote.fees} {fromToken}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="p-3 bg-muted rounded-lg space-y-1">
+              <div className="flex justify-between text-xs">
+                <span>Time:</span>
+                <span>{Math.ceil(quote.executionTime / 60)}min</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span>Fee:</span>
+                <span>{quote.fees} {fromToken}</span>
+              </div>
+            </div>
           )}
 
           {/* Action Buttons */}
           <div className="space-y-2">
             <Button 
-              className="w-full" 
+              className="w-full h-9" 
               onClick={getQuote}
               disabled={isLoading || !amount}
+              size="sm"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Getting Quote...
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Quote...
                 </>
               ) : (
                 "Get Quote"
@@ -275,20 +224,21 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
 
             {quote && (
               <Button 
-                className="w-full" 
+                className="w-full h-9" 
                 onClick={executeBridge}
                 disabled={isExecuting}
                 variant="secondary"
+                size="sm"
               >
                 {isExecuting ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Bridging...
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Swapping...
                   </>
                 ) : (
                   <>
-                    <ArrowRight className="w-4 h-4 mr-2" />
-                    Execute Bridge
+                    <ArrowRight className="w-3 h-3 mr-1" />
+                    Swap
                   </>
                 )}
               </Button>
