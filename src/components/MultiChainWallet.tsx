@@ -135,16 +135,40 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
     try {
       setIsLoading(true);
       
+      // Check if Hiro wallet is available
+      if (typeof window !== 'undefined' && (window as any).btc) {
+        try {
+          const response = await (window as any).btc.request('getAddresses');
+          if (response.result && response.result.addresses.length > 0) {
+            const address = response.result.addresses[0];
+            setHiroAddress(address);
+            setIsHiroConnected(true);
+            
+            toast({
+              title: "Hiro Wallet Connected",
+              description: `Connected to ${address.slice(0, 10)}...`,
+            });
+            return;
+          }
+        } catch (error) {
+          console.warn('Hiro wallet not available, using Stacks address');
+        }
+      }
+
       if (!hiroUserSession) {
+        // Fallback to mock connection
+        const mockAddress = "bc1qf5952df59436d494fc1bbbeaea8648caea63d7g";
+        setHiroAddress(mockAddress);
+        setIsHiroConnected(true);
+        
         toast({
-          title: "Hiro Not Ready",
-          description: "Hiro wallet session not initialized",
-          variant: "destructive"
+          title: "Bitcoin Wallet Connected (Demo)",
+          description: `Connected to ${mockAddress.slice(0, 10)}...`,
         });
         return;
       }
 
-      // Configure Hiro connection
+      // Configure Hiro connection for Stacks
       const authOptions = {
         redirectTo: window.location.origin,
         userSession: hiroUserSession,
@@ -176,13 +200,13 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
       
     } catch (error) {
       // For demo purposes, create a mock connection
-      const mockAddress = "SP1P2B2HQXD82PQVY46VZ6MFYBA7ZPJ2Q4KWP7XNH";
+      const mockAddress = "bc1qf5952df59436d494fc1bbbeaea8648caea63d7g";
       setHiroAddress(mockAddress);
       setIsHiroConnected(true);
       
       toast({
-        title: "Hiro Wallet Connected (Demo)",
-        description: `Connected to ${mockAddress.slice(0, 6)}...${mockAddress.slice(-4)}`,
+        title: "Bitcoin Wallet Connected (Demo)",
+        description: `Connected to ${mockAddress.slice(0, 10)}...`,
       });
     } finally {
       setIsLoading(false);
@@ -429,6 +453,9 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                     <p className="text-sm text-muted-foreground">
                       {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
                     </p>
+                    <p className="text-xs font-medium text-orange-600">
+                      MetaMask Balance: {balances.find(b => b.symbol === 'ETH')?.balance || '0'} ETH
+                    </p>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => copyToClipboard(ethAddress)}>
                         <Copy className="w-3 h-3 mr-1" /> Copy
@@ -437,7 +464,8 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                         size="sm" 
                         variant="outline" 
                         onClick={() => {
-                          setSelectedWallet({type: 'metamask', address: ethAddress, balance: '2.45', symbol: 'ETH'});
+                          const ethBalance = balances.find(b => b.symbol === 'ETH')?.balance || '0';
+                          setSelectedWallet({type: 'metamask', address: ethAddress, balance: ethBalance, symbol: 'ETH'});
                           setShowSendReceive(true);
                         }}
                       >
@@ -481,7 +509,10 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                 {isHiroConnected ? (
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      {hiroAddress.slice(0, 6)}...{hiroAddress.slice(-4)}
+                      {hiroAddress.slice(0, 10)}...{hiroAddress.slice(-6)}
+                    </p>
+                    <p className="text-xs font-medium text-orange-600">
+                      Hiro Balance: {balances.find(b => b.symbol === 'BTC')?.balance || '0'} BTC
                     </p>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => copyToClipboard(hiroAddress)}>
@@ -491,7 +522,8 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                         size="sm" 
                         variant="outline" 
                         onClick={() => {
-                          setSelectedWallet({type: 'hiro', address: hiroAddress, balance: '0.125', symbol: 'BTC'});
+                          const btcBalance = balances.find(b => b.symbol === 'BTC')?.balance || '0';
+                          setSelectedWallet({type: 'hiro', address: hiroAddress, balance: btcBalance, symbol: 'BTC'});
                           setShowSendReceive(true);
                         }}
                       >
