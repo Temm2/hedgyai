@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Bot, TrendingUp, DollarSign, Clock, Trash2, Activity, Shield, Calculator, Fuel } from "lucide-react";
+import { Bot, TrendingUp, DollarSign, Clock, Trash2, Activity, Shield, Calculator, Fuel, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { StrategyRecommendationModal } from "./StrategyRecommendationModal";
+import { useInvestmentCalculations } from "@/hooks/use-investment-calculations";
 
 interface Investment {
   id: string;
@@ -52,6 +53,15 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
   const [investmentHistory, setInvestmentHistory] = useState<Investment[]>([]);
   const { toast } = useToast();
 
+  // Use real-time calculations with 1inch and TokenMetrics APIs
+  const calculations = useInvestmentCalculations(
+    investmentData.amount,
+    investmentData.tokenType,
+    investmentData.strategy,
+    investmentData.lockPeriod,
+    parseInt(investmentData.chain)
+  );
+
   const chains = [
     { name: "Ethereum", id: "1" },
     { name: "Bitcoin", id: "bitcoin" },
@@ -66,22 +76,10 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
     setInvestmentData(prev => ({ ...prev, [field]: value }));
   };
 
+  // This function is now replaced by the useInvestmentCalculations hook
+  // but kept for backward compatibility
   const calculateMinReturn = (amount: string, strategy: string, lockPeriod: string) => {
-    const strategies: Record<string, number> = {
-      "Stablecoin Farming": 8,
-      "Momentum Rotation": 15,
-      "Mean Reversion": 12,
-      "Multi-Chain Arbitrage": 12,
-      "High-Yield Crypto Credit": 25,
-      "Options Writing": 18,
-      "Structured Products": 20,
-      "Meta Model Blend": 16
-    };
-    
-    const baseRate = strategies[strategy] || 10;
-    const lockMultiplier = parseInt(lockPeriod) / 30; // Monthly multiplier
-    const minReturn = parseFloat(amount) * (baseRate / 100) * lockMultiplier;
-    return minReturn.toFixed(2);
+    return calculations.minReturn || "0";
   };
 
   const handleInvestNow = () => {
@@ -94,8 +92,8 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
       return;
     }
 
-    const minReturn = calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod);
-    const guaranteedReturn = (parseFloat(minReturn) * 0.8).toFixed(2); // 80% of min return as guaranteed
+    const minReturn = calculations.minReturn;
+    const guaranteedReturn = calculations.guaranteedReturn;
 
     const newInvestment: Investment = {
       id: Date.now().toString(),
@@ -106,7 +104,7 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
       withdrawCurrency: investmentData.withdrawCurrency,
       lockPeriod: investmentData.lockPeriod,
       strategy: investmentData.strategy,
-      riskLevel: investmentData.riskLevel,
+      riskLevel: calculations.riskLevel,
       guaranteedReturn,
       minReturn,
       gasFee: investmentData.gasFee,
@@ -312,13 +310,21 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                         <Shield className="w-4 h-4" />
                         Risk Level
                       </Label>
-                      <Badge variant={
-                        ['Stablecoin Farming'].includes(investmentData.strategy) ? 'secondary' :
-                        ['Momentum Rotation', 'Mean Reversion', 'Multi-Chain Arbitrage', 'Options Writing', 'Meta Model Blend'].includes(investmentData.strategy) ? 'default' : 'destructive'
+                       <Badge variant={
+                        calculations.riskLevel === 'Low' ? 'secondary' :
+                        calculations.riskLevel === 'Medium' ? 'default' : 'destructive'
                       }>
-                        {['Stablecoin Farming'].includes(investmentData.strategy) ? 'Low' :
-                         ['Momentum Rotation', 'Mean Reversion', 'Multi-Chain Arbitrage', 'Options Writing', 'Meta Model Blend'].includes(investmentData.strategy) ? 'Medium' : 'High'}
+                        {calculations.isLoading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          calculations.riskLevel
+                        )}
                       </Badge>
+                      {calculations.error && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {calculations.error}
+                        </p>
+                      )}
                     </div>
                     
                     {investmentData.amount && (
@@ -327,16 +333,32 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                           <div>
                             <Label className="flex items-center gap-2 text-sm">
                               <Calculator className="w-3 h-3" />
-                              Min Return
+                              Min Return (Real-time)
                             </Label>
                             <p className="font-semibold text-green-500">
-                              {calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod)} {investmentData.tokenType}
+                              {calculations.isLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                `${calculations.minReturn} ${investmentData.tokenType}`
+                              )}
                             </p>
+                            {calculations.spotPrice > 0 && !calculations.isLoading && (
+                              <p className="text-xs text-muted-foreground">
+                                Spot: ${calculations.spotPrice.toFixed(2)}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <Label className="text-sm">Guaranteed Return</Label>
                             <p className="font-semibold text-blue-500">
-                              {(parseFloat(calculateMinReturn(investmentData.amount, investmentData.strategy, investmentData.lockPeriod)) * 0.8).toFixed(2)} {investmentData.tokenType}
+                              {calculations.isLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                `${calculations.guaranteedReturn} ${investmentData.tokenType}`
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              80% of calculated return
                             </p>
                           </div>
                         </div>
@@ -346,7 +368,13 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                             <Fuel className="w-3 h-3" />
                             Estimated Gas Fee
                           </Label>
-                          <p className="font-medium">~0.02 ETH</p>
+                          <p className="font-medium">
+                            {calculations.isLoading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              `~${calculations.gasPrice} ETH`
+                            )}
+                          </p>
                         </div>
                       </>
                     )}

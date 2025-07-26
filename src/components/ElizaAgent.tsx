@@ -108,12 +108,28 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
         
         if (relevantSignal) {
           updateAgent({
-            currentAction: `TokenMetrics signal: ${relevantSignal.action} with ${(relevantSignal.confidence * 100).toFixed(0)}% confidence`
+            currentAction: `Real TokenMetrics signal: ${relevantSignal.action} (${relevantSignal.confidence}% confidence, ${relevantSignal.riskLevel} risk)`
+          });
+          
+          toast({
+            title: "Real Signal Received",
+            description: `${relevantSignal.action} signal for ${relevantSignal.symbol} - ${relevantSignal.reason}`,
+          });
+        } else {
+          updateAgent({
+            currentAction: 'No specific signals for this token, using market overview...'
           });
         }
       } catch (error) {
+        console.error('TokenMetrics API error:', error);
         updateAgent({
-          currentAction: 'Using fallback market analysis...'
+          currentAction: 'TokenMetrics API limit reached - using fallback analysis...'
+        });
+        
+        toast({
+          title: "API Limit Reached",
+          description: "Using backup analysis for this agent",
+          variant: "destructive"
         });
       }
       

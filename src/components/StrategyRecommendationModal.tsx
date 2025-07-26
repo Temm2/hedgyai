@@ -1,8 +1,10 @@
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Shield, Clock, Target, BarChart3 } from "lucide-react";
+import { TrendingUp, Shield, Clock, Target, BarChart3, Loader2 } from "lucide-react";
+import { tokenMetricsAPI } from "@/lib/tokenmetrics-api";
 
 interface Strategy {
   name: string;
@@ -58,9 +60,31 @@ const strategies: Strategy[] = [
   }
 ];
 
-const getRecommendedStrategy = (): Strategy => {
-  // Mock logic for recommendation based on current market conditions
-  return strategies[0]; // Stablecoin Farming as default safe recommendation
+const getRecommendedStrategy = async (): Promise<Strategy> => {
+  try {
+    // Get real market signals to recommend strategy
+    const signals = await tokenMetricsAPI.getPortfolioSignals();
+    
+    if (signals.length > 0) {
+      const signal = signals[0];
+      
+      // Recommend strategy based on real market signals
+      if (signal.action === 'BUY' && signal.confidence > 80) {
+        if (signal.riskLevel === 'LOW') return strategies.find(s => s.name === 'Stablecoin Farming') || strategies[0];
+        if (signal.riskLevel === 'HIGH') return strategies.find(s => s.name === 'High-Yield Crypto Credit') || strategies[3];
+        return strategies.find(s => s.name === 'Momentum Rotation') || strategies[1];
+      }
+      
+      if (signal.action === 'SELL' || signal.confidence < 50) {
+        return strategies.find(s => s.name === 'Stablecoin Farming') || strategies[0]; // Safe option
+      }
+    }
+  } catch (error) {
+    console.error('Error getting real strategy recommendation:', error);
+  }
+  
+  // Fallback to safe option
+  return strategies[0];
 };
 
 interface StrategyRecommendationModalProps {
@@ -68,7 +92,24 @@ interface StrategyRecommendationModalProps {
 }
 
 export function StrategyRecommendationModal({ onStrategySelect }: StrategyRecommendationModalProps) {
-  const recommended = getRecommendedStrategy();
+  const [recommended, setRecommended] = useState<Strategy>(strategies[0]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const loadRecommendation = async () => {
+      setIsLoading(true);
+      try {
+        const strategy = await getRecommendedStrategy();
+        setRecommended(strategy);
+      } catch (error) {
+        console.error('Failed to load strategy recommendation:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRecommendation();
+  }, []);
 
   return (
     <Dialog>
@@ -90,8 +131,12 @@ export function StrategyRecommendationModal({ onStrategySelect }: StrategyRecomm
           <Card className="border-primary/20 bg-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                Recommended for Current Market
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                ) : (
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                )}
+                Recommended for Current Market {isLoading && "(Analyzing real signals...)"}
               </CardTitle>
             </CardHeader>
             <CardContent>
