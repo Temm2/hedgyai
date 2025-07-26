@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Wallet, RefreshCw, Send, Download, ArrowUpDown, Bitcoin, Zap, X } from "lucide-react";
+import { Wallet, RefreshCw, Send, Download, ArrowUpDown, Bitcoin, Zap, X, Bot } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { MetaMaskSDK } from "@metamask/sdk";
+import { AgentWalletManager, ProgrammaticWallet } from "@/lib/programmatic-wallets";
 
 interface WalletBalance {
   chain: string;
@@ -26,11 +27,16 @@ interface MultiChainWalletProps {
 export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: MultiChainWalletProps) {
   const [isEthConnected, setIsEthConnected] = useState(false);
   const [isBtcConnected, setIsBtcConnected] = useState(false);
+  const [isLeatherConnected, setIsLeatherConnected] = useState(false);
+  const [isAgentWalletActive, setIsAgentWalletActive] = useState(false);
   const [ethAddress, setEthAddress] = useState("");
   const [btcAddress, setBtcAddress] = useState("");
+  const [leatherAddress, setLeatherAddress] = useState("");
   const [balances, setBalances] = useState<WalletBalance[]>([]);
+  const [agentWallets, setAgentWallets] = useState<ProgrammaticWallet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [metaMaskSDK, setMetaMaskSDK] = useState<MetaMaskSDK | null>(null);
+  const [agentWalletManager] = useState(() => new AgentWalletManager());
   const { toast } = useToast();
 
   const supportedChains = [
@@ -74,10 +80,10 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
   }, []);
 
   useEffect(() => {
-    if (isEthConnected || isBtcConnected) {
+    if (isEthConnected || isBtcConnected || isLeatherConnected || isAgentWalletActive) {
       loadBalances();
     }
-  }, [isEthConnected, isBtcConnected]);
+  }, [isEthConnected, isBtcConnected, isLeatherConnected, isAgentWalletActive]);
 
   const connectEthWallet = async () => {
     try {
@@ -115,25 +121,63 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
     }
   };
 
-  const connectBtcWallet = async () => {
+  const connectLeatherWallet = async () => {
     try {
       setIsLoading(true);
       
-      // For Bitcoin, we'll simulate connection since it requires different implementation
-      // In production, you'd use a Bitcoin wallet adapter
-      const mockBtcAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
-      setBtcAddress(mockBtcAddress);
-      setIsBtcConnected(true);
-      
-      toast({
-        title: "Bitcoin Wallet Connected",
-        description: `Connected to ${mockBtcAddress.slice(0, 6)}...${mockBtcAddress.slice(-4)}`,
-      });
+      // Check if Leather wallet is available
+      if (typeof window !== 'undefined' && (window as any).btc) {
+        const response = await (window as any).btc.request('getAddresses');
+        if (response?.result?.length > 0) {
+          const address = response.result[0];
+          setLeatherAddress(address);
+          setIsLeatherConnected(true);
+          
+          toast({
+            title: "Leather Wallet Connected",
+            description: `Connected to ${address.slice(0, 6)}...${address.slice(-4)}`,
+          });
+        }
+      } else {
+        // Simulate Leather wallet connection for demo
+        const mockAddress = "bc1qleatherwallet123456789";
+        setLeatherAddress(mockAddress);
+        setIsLeatherConnected(true);
+        
+        toast({
+          title: "Leather Wallet Connected (Demo)",
+          description: `Connected to ${mockAddress.slice(0, 6)}...${mockAddress.slice(-4)}`,
+        });
+      }
       
     } catch (error) {
       toast({
         title: "Connection Failed",
-        description: "Failed to connect Bitcoin wallet. Please try again.",
+        description: "Failed to connect Leather wallet. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const initializeAgentWallet = async () => {
+    try {
+      setIsLoading(true);
+      
+      const wallets = await agentWalletManager.getWallets();
+      setAgentWallets(wallets);
+      setIsAgentWalletActive(true);
+      
+      toast({
+        title: "Agent Wallets Initialized",
+        description: "Programmatic wallets ready for automated trading",
+      });
+      
+    } catch (error) {
+      toast({
+        title: "Agent Wallet Failed",
+        description: "Failed to initialize agent wallets",
         variant: "destructive"
       });
     } finally {
@@ -144,9 +188,13 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
   const disconnectWallets = () => {
     setIsEthConnected(false);
     setIsBtcConnected(false);
+    setIsLeatherConnected(false);
+    setIsAgentWalletActive(false);
     setEthAddress("");
     setBtcAddress("");
+    setLeatherAddress("");
     setBalances([]);
+    setAgentWallets([]);
     onDisconnect?.();
     
     toast({
@@ -182,14 +230,28 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
         );
       }
       
-      if (isBtcConnected) {
+      if (isLeatherConnected) {
         mockBalances.push({
-          chain: "Bitcoin",
-          chainId: "bitcoin",
+          chain: "Bitcoin (Leather)",
+          chainId: "bitcoin-leather",
           symbol: "BTC",
           balance: "0.125",
           usdValue: "5,250.00",
           icon: <Bitcoin className="w-5 h-5" />
+        });
+      }
+
+      // Add agent wallet balances
+      if (isAgentWalletActive && agentWallets.length > 0) {
+        agentWallets.forEach(wallet => {
+          mockBalances.push({
+            chain: `${wallet.symbol === 'ETH' ? 'Ethereum' : 'Bitcoin'} (Agent)`,
+            chainId: `${wallet.chainId}-agent`,
+            symbol: wallet.symbol,
+            balance: wallet.balance,
+            usdValue: wallet.symbol === 'ETH' ? "4,200.00" : "2,625.00",
+            icon: wallet.symbol === 'ETH' ? <Bot className="w-5 h-5" /> : <Bot className="w-5 h-5" />
+          });
         });
       }
       
@@ -214,7 +276,7 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
     ).toLocaleString();
   };
 
-  const hasAnyConnection = isEthConnected || isBtcConnected;
+  const hasAnyConnection = isEthConnected || isLeatherConnected || isAgentWalletActive;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -238,7 +300,7 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                 Connect your wallets to access cross-chain trading and investment features
               </p>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Ethereum Wallet */}
                 <div className="p-4 border border-border rounded-lg space-y-3">
                   <div className="flex items-center gap-2">
@@ -267,18 +329,18 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                   </Button>
                 </div>
 
-                {/* Bitcoin Wallet */}
+                {/* Bitcoin Leather Wallet */}
                 <div className="p-4 border border-border rounded-lg space-y-3">
                   <div className="flex items-center gap-2">
                     <Bitcoin className="w-5 h-5" />
                     <span className="font-medium">Bitcoin Wallet</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Connect your Bitcoin wallet for BTC transactions
+                    Connect Leather wallet for Bitcoin transactions
                   </p>
                   <Button 
                     className="w-full" 
-                    onClick={connectBtcWallet}
+                    onClick={connectLeatherWallet}
                     disabled={isLoading}
                     variant="outline"
                   >
@@ -290,7 +352,36 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                     ) : (
                       <>
                         <Bitcoin className="w-4 h-4 mr-2" />
-                        Connect Bitcoin
+                        Connect Leather
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Agent Wallet */}
+                <div className="p-4 border border-border rounded-lg space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Bot className="w-5 h-5" />
+                    <span className="font-medium">Agent Wallets</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Initialize programmatic wallets for automated trading
+                  </p>
+                  <Button 
+                    className="w-full" 
+                    onClick={initializeAgentWallet}
+                    disabled={isLoading}
+                    variant="secondary"
+                  >
+                    {isLoading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Initializing...
+                      </>
+                    ) : (
+                      <>
+                        <Bot className="w-4 h-4 mr-2" />
+                        Initialize Agent
                       </>
                     )}
                   </Button>
@@ -318,19 +409,36 @@ export function MultiChainWallet({ isOpen, onClose, onConnect, onDisconnect }: M
                   </div>
                 )}
                 
-                {isBtcConnected && (
+                {isLeatherConnected && (
                   <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
                     <div className="flex items-center gap-3">
                       <Bitcoin className="w-5 h-5" />
                       <div>
-                        <p className="font-medium">Bitcoin</p>
+                        <p className="font-medium">Bitcoin (Leather)</p>
                         <p className="text-sm text-muted-foreground">
-                          {btcAddress.slice(0, 6)}...{btcAddress.slice(-4)}
+                          {leatherAddress.slice(0, 6)}...{leatherAddress.slice(-4)}
                         </p>
                       </div>
                     </div>
                     <Badge variant="secondary" className="text-green-500">
                       Connected
+                    </Badge>
+                  </div>
+                )}
+                
+                {isAgentWalletActive && (
+                  <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Bot className="w-5 h-5" />
+                      <div>
+                        <p className="font-medium">Agent Wallets</p>
+                        <p className="text-sm text-muted-foreground">
+                          {agentWallets.length} programmatic wallets active
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="text-blue-500">
+                      Active
                     </Badge>
                   </div>
                 )}

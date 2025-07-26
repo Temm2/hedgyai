@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useOneInch, SUPPORTED_CHAINS } from "@/hooks/use-oneinch";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Activity, Zap, Clock, Target, TrendingUp, Shield } from "lucide-react";
+import { AgentWalletManager } from "@/lib/programmatic-wallets";
 
 interface Investment {
   id: string;
@@ -43,6 +44,7 @@ interface ElizaAgentProps {
 
 export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
   const [agents, setAgents] = useState<ElizaAgentStatus[]>([]);
+  const [agentWalletManager] = useState(() => new AgentWalletManager());
   const { toast } = useToast();
   const {
     tokens,
@@ -132,12 +134,32 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
         });
       }
 
-      // Phase 4: Execution
+      // Phase 4: Cross-chain Execution using Agent Wallets
       updateAgent({
-        currentAction: 'Executing trade with optimal slippage protection...',
+        currentAction: 'Executing cross-chain arbitrage with programmatic wallets...',
         trades: 1
       });
-      await delay(2000);
+      
+      try {
+        const arbitrageTx = await agentWalletManager.executeArbitrage(
+          "ethereum", 
+          "bitcoin", 
+          "0.1"
+        );
+        
+        updateAgent({
+          currentAction: `Cross-chain arbitrage executed. Tx: ${arbitrageTx.slice(0, 10)}...`
+        });
+        
+        await delay(1000);
+      } catch (error) {
+        console.error("Arbitrage execution failed:", error);
+        updateAgent({
+          currentAction: 'Fallback to single-chain execution...'
+        });
+      }
+      
+      await delay(1000);
 
       // Phase 5: Monitoring
       updateAgent({
@@ -197,9 +219,11 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
             'Optimizing position size based on risk parameters...',
             'Checking for MEV opportunities in mempool...',
             'Analyzing on-chain signals for position adjustments...',
-            'Executing cross-chain arbitrage via 1inch Fusion+...',
-            'Managing limit orders for optimal execution...',
-            'Protecting against MEV attacks...'
+            'Executing cross-chain arbitrage via agent wallets...',
+            'Managing limit orders with programmatic execution...',
+            'Protecting against MEV attacks with Fusion+...',
+            'Balancing ETH and BTC positions autonomously...',
+            'Monitoring gas fees across chains for optimal timing...'
           ];
           
           const randomPnl = (Math.random() * 1.5 - 0.3).toFixed(2);
