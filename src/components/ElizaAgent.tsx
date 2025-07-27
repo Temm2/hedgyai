@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Bot, Activity, Zap, Clock, Target, TrendingUp, Shield } from "lucide-react";
 import { AgentWalletManager } from "@/lib/programmatic-wallets";
 import { tokenMetricsAPI } from "@/lib/tokenmetrics-api";
-import { elizaOS } from "@/lib/eliza-integration";
 
 interface Investment {
   id: string;
@@ -84,52 +83,8 @@ export function ElizaAgent({ investments, onAgentUpdate }: ElizaAgentProps) {
     // Load tokens for the investment chain
     await loadTokens(parseInt(investment.chain));
 
-    // Start real ElizaOS agent
-    await startRealElizaAgent(agentId, investment);
-  };
-
-  const startRealElizaAgent = async (agentId: string, investment: Investment) => {
-    try {
-      // Create real ElizaOS agent
-      const elizaAgent = await elizaOS.createAgent({
-        name: `HedgyAgent_${investment.id}`,
-        strategy: investment.strategy,
-        riskTolerance: investment.riskLevel.toLowerCase() as 'low' | 'medium' | 'high',
-        capital: parseFloat(investment.amount),
-      });
-
-      // Update UI with real agent status
-      const updateFromEliza = () => {
-        const currentAgent = elizaOS.getAgent(elizaAgent.id);
-        if (currentAgent) {
-          setAgents(prev => prev.map(agent => 
-            agent.id === agentId ? {
-              ...agent,
-              status: currentAgent.status as any,
-              currentAction: currentAgent.currentAction,
-              trades: currentAgent.trades.length,
-              pnl: `${currentAgent.pnl > 0 ? '+' : ''}${currentAgent.pnl.toFixed(2)}%`,
-              lastActivity: currentAgent.lastActivity
-            } : agent
-          ));
-        }
-      };
-
-      // Monitor real agent every 5 seconds
-      const monitorInterval = setInterval(updateFromEliza, 5000);
-
-      // Clean up after lock period
-      const lockPeriodMs = parseInt(investment.lockPeriod) * 24 * 60 * 60 * 1000;
-      setTimeout(() => {
-        clearInterval(monitorInterval);
-        elizaOS.stopAgent(elizaAgent.id);
-      }, lockPeriodMs);
-
-    } catch (error) {
-      console.error('ElizaOS agent creation failed:', error);
-      // Fallback to simulation
-      await simulateElizaWorkflow(agentId, investment);
-    }
+    // Simulate Eliza agent workflow
+    await simulateElizaWorkflow(agentId, investment);
   };
 
   const simulateElizaWorkflow = async (agentId: string, investment: Investment) => {
