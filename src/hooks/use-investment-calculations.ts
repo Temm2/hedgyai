@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { oneInchAPI } from '@/lib/oneinch-api';
 import { tokenMetricsAPI } from '@/lib/tokenmetrics-api';
+import { blocknativeGasAPI } from '@/lib/blocknative-gas-api';
+import { coinGeckoAPI } from '@/lib/coingecko-api';
+import { aaveAPI } from '@/lib/aave-api';
+import { messariAPI } from '@/lib/messari-api';
 
 interface InvestmentCalculation {
   spotPrice: number;
@@ -35,31 +39,66 @@ export function useInvestmentCalculations(
       setCalculation(prev => ({ ...prev, isLoading: true, error: undefined }));
 
       try {
-        // Get real-time data from APIs with fallback handling
+        // Get real-time data from multiple APIs with fallback handling
         let spotPrice = 0;
         let signals: any[] = [];
+        let gasCost = 0;
+        let defiYield = 0;
         
+        // 1. Get spot price from multiple sources
         try {
-          const spotPrices = await oneInchAPI.getTokenPrices([getTokenAddress(tokenType)], chainId);
-          spotPrice = spotPrices[getTokenAddress(tokenType)]?.price || getTokenFallbackPrice(tokenType);
+          // Try CoinGecko first for better price data
+          const coinGeckoId = coinGeckoAPI.getTokenCoinGeckoId(tokenType);
+          const priceData = await coinGeckoAPI.getSimplePrice([coinGeckoId]);
+          spotPrice = priceData[coinGeckoId]?.usd || 0;
+          
+          // Fallback to 1inch if CoinGecko fails
+          if (!spotPrice) {
+            const spotPrices = await oneInchAPI.getTokenPrices([getTokenAddress(tokenType)], chainId);
+            spotPrice = spotPrices[getTokenAddress(tokenType)]?.price || 0;
+          }
         } catch (error) {
-          console.warn('1inch price API failed, using fallback:', error);
-          spotPrice = getTokenFallbackPrice(tokenType);
+          console.warn('Price APIs failed, using fallback:', error);
         }
         
+        if (!spotPrice) spotPrice = getTokenFallbackPrice(tokenType);
+        
+        // 2. Get trading signals from TokenMetrics
         try {
           signals = await tokenMetricsAPI.getSignals([tokenType]);
         } catch (error) {
           console.warn('TokenMetrics API failed, using demo signals:', error);
-          signals = []; // Will trigger fallback logic
+          signals = [];
+        }
+        
+        // 3. Get gas costs from Blocknative
+        try {
+          gasCost = await blocknativeGasAPI.getEstimatedGasCost(chainId);
+        } catch (error) {
+          console.warn('Blocknative gas API failed, using fallback:', error);
+          gasCost = getFallbackGasCost(chainId);
+        }
+        
+        // 4. Get DeFi yield data from Aave and Messari
+        try {
+          const [aaveAPY, messariYield] = await Promise.all([
+            aaveAPI.getLendingAPY(tokenType),
+            messariAPI.getDeFiYieldData(messariAPI.getAssetSlug(tokenType))
+          ]);
+          
+          defiYield = Math.max(aaveAPY, messariYield?.yield || 0);
+        } catch (error) {
+          console.warn('DeFi yield APIs failed, using fallback:', error);
+          defiYield = 0;
         }
         
         // Calculate returns based on real market data and signals
         const baseRate = getStrategyBaseRate(strategy);
         const signalMultiplier = getSignalMultiplier(signals[0]);
+        const defiMultiplier = getDefiYieldMultiplier(defiYield, strategy);
         const lockMultiplier = parseInt(lockPeriod) / 30;
         
-        const adjustedRate = baseRate * signalMultiplier;
+        const adjustedRate = baseRate * signalMultiplier * defiMultiplier;
         const minReturn = parseFloat(amount) * (adjustedRate / 100) * lockMultiplier;
         const guaranteedReturn = minReturn * 0.8; // 80% of calculated return
 
@@ -68,7 +107,7 @@ export function useInvestmentCalculations(
 
         setCalculation({
           spotPrice,
-          gasPrice: await estimateGasCost(chainId),
+          gasPrice: gasCost,
           minReturn: minReturn.toFixed(4),
           guaranteedReturn: guaranteedReturn.toFixed(4),
           riskLevel,
@@ -152,20 +191,28 @@ function getStrategyRiskLevel(strategy: string): 'Low' | 'Medium' | 'High' {
   return 'Medium';
 }
 
-async function estimateGasCost(chainId: number): Promise<number> {
-  try {
-    // This would use 1inch gas price API in a real implementation
-    // For now, return estimated values based on chain
-    const gasEstimates: Record<number, number> = {
-      1: 0.02,    // Ethereum
-      137: 0.01,  // Polygon
-      56: 0.005,  // BSC
-      42161: 0.005, // Arbitrum
-    };
-    return gasEstimates[chainId] || 0.02;
-  } catch (error) {
-    return 0.02; // Fallback
+function getFallbackGasCost(chainId: number): number {
+  const gasEstimates: Record<number, number> = {
+    1: 0.02,    // Ethereum
+    137: 0.01,  // Polygon
+    56: 0.005,  // BSC
+    42161: 0.005, // Arbitrum
+    0: 0.0001,  // Bitcoin
+  };
+  return gasEstimates[chainId] || 0.02;
+}
+
+function getDefiYieldMultiplier(defiYield: number, strategy: string): number {
+  // Adjust strategy returns based on real DeFi yields
+  if (strategy.includes('Stablecoin') && defiYield > 0) {
+    return Math.min(1 + (defiYield / 100), 1.5); // Cap at 50% boost
   }
+  
+  if (strategy.includes('High-Yield') && defiYield > 0) {
+    return Math.min(1 + (defiYield / 200), 1.3); // Cap at 30% boost
+  }
+  
+  return 1; // No adjustment for other strategies
 }
 
 function calculateFallbackReturn(amount: string, strategy: string, lockPeriod: string): string {

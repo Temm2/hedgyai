@@ -1,6 +1,6 @@
 // TokenMetrics API Integration for Real Signals
 const API_KEY = "tm-8e5bcce7-0c4a-4fe4-9dc0-8cf1c3b5a0a8";
-const BASE_URL = "https://api.tokenmetrics.com/v2";
+const BASE_URL = "https://api.tokenmetrics.com/v1";
 
 export interface TokenSignal {
   symbol: string;
