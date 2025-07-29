@@ -216,6 +216,134 @@ contract AgentExecutor is AccessControl, ReentrancyGuard {
     /**
      * @dev Get execution history
      */
+    // Cross-chain swap execution
+    function executeCrossChainSwap(
+        string memory fromAsset,
+        string memory toAsset,
+        uint256 amount,
+        bytes memory destinationAddress,
+        uint256 minReturn
+    ) external onlyRole(AGENT_ROLE) nonReentrant {
+        AgentStrategy storage agent = agents[msg.sender];
+        require(agent.isActive, "Agent not active");
+        require(agent.supportsCrossChain, "Agent doesn't support cross-chain");
+        require(agent.allocatedCapital >= amount, "Insufficient allocated capital");
+        
+        bytes32 orderId = keccak256(abi.encodePacked(
+            msg.sender,
+            fromAsset,
+            toAsset,
+            amount,
+            block.timestamp
+        ));
+        
+        agent.allocatedCapital -= amount;
+        agent.lastExecutionTime = block.timestamp;
+        
+        // Execute cross-chain swap based on asset pair
+        bool success = false;
+        if (keccak256(abi.encodePacked(fromAsset)) == keccak256(abi.encodePacked("ETH")) &&
+            keccak256(abi.encodePacked(toAsset)) == keccak256(abi.encodePacked("BTC"))) {
+            try crossChainBridge.swapETHToBTC{value: amount}(amount, destinationAddress, minReturn) {
+                success = true;
+            } catch {
+                agent.allocatedCapital += amount; // Restore capital on failure
+            }
+        } else if (keccak256(abi.encodePacked(fromAsset)) == keccak256(abi.encodePacked("BTC")) &&
+                   keccak256(abi.encodePacked(toAsset)) == keccak256(abi.encodePacked("ETH"))) {
+            try crossChainBridge.swapBTCToETH(amount, abi.decode(destinationAddress, (address)), minReturn) {
+                success = true;
+            } catch {
+                agent.allocatedCapital += amount; // Restore capital on failure
+            }
+        }
+        
+        executionHistory[orderId] = ExecutionLog({
+            orderId: orderId,
+            agent: msg.sender,
+            executionType: "cross_chain",
+            amount: amount,
+            timestamp: block.timestamp,
+            success: success,
+            details: string(abi.encodePacked(fromAsset, " -> ", toAsset))
+        });
+        
+        emit CrossChainSwapExecuted(orderId, msg.sender, fromAsset, toAsset);
+        emit StrategyExecuted(orderId, msg.sender, success);
+    }
+    
+    // Create grid trading strategy
+    function createGridTradingStrategy(
+        string memory pair,
+        uint256 basePrice,
+        uint256 gridSpacing,
+        uint256 orderSize,
+        uint8 gridLevels
+    ) external onlyRole(AGENT_ROLE) returns (bytes32) {
+        AgentStrategy storage agent = agents[msg.sender];
+        require(agent.isActive, "Agent not active");
+        require(agent.allocatedCapital >= orderSize * gridLevels * 2, "Insufficient capital for grid");
+        
+        bytes32 strategyId = crossChainBridge.createGridStrategy(
+            pair,
+            basePrice,
+            gridSpacing,
+            orderSize,
+            gridLevels
+        );
+        
+        agent.activeGridStrategies.push(strategyId);
+        agent.lastExecutionTime = block.timestamp;
+        
+        emit GridStrategyActivated(strategyId, msg.sender, pair);
+        
+        return strategyId;
+    }
+    
+    // Create stop loss order
+    function createStopLossOrder(
+        string memory pair,
+        uint256 triggerPrice,
+        uint256 amount,
+        bool isTrailing,
+        uint256 trailAmount
+    ) external onlyRole(AGENT_ROLE) returns (bytes32) {
+        AgentStrategy storage agent = agents[msg.sender];
+        require(agent.isActive, "Agent not active");
+        require(agent.allocatedCapital >= amount, "Insufficient allocated capital");
+        
+        bytes32 orderId = crossChainBridge.createStopLoss(
+            pair,
+            triggerPrice,
+            amount,
+            isTrailing,
+            trailAmount
+        );
+        
+        agent.activeStopLossOrders.push(orderId);
+        agent.allocatedCapital -= amount; // Reserve capital for stop loss
+        agent.lastExecutionTime = block.timestamp;
+        
+        emit StopLossActivated(orderId, msg.sender, pair);
+        
+        return orderId;
+    }
+    
+    // Update cross-chain bridge address
+    function updateCrossChainBridge(address newBridge) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        crossChainBridge = ICrossChainBridge(newBridge);
+    }
+    
+    // Get agent's active grid strategies
+    function getAgentGridStrategies(address agentAddress) external view returns (bytes32[] memory) {
+        return agents[agentAddress].activeGridStrategies;
+    }
+    
+    // Get agent's active stop loss orders
+    function getAgentStopLossOrders(address agentAddress) external view returns (bytes32[] memory) {
+        return agents[agentAddress].activeStopLossOrders;
+    }
+    
     function getExecutionLog(bytes32 orderId) external view returns (ExecutionLog memory) {
         return executionHistory[orderId];
     }
