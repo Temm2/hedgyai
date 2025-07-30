@@ -9,6 +9,8 @@ import { ArrowUpDown, ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { lifiAPI, type BridgeQuote, type BridgeParams } from "@/lib/lifi-api";
 import { oneInchAPI } from "@/lib/oneinch-api";
+import { coinGeckoAPI } from "@/lib/coingecko-api";
+import { chainflipAPI } from "@/lib/chainflip-api";
 
 interface BridgeInterfaceProps {
   isOpen: boolean;
@@ -87,18 +89,16 @@ export function BridgeInterface({ isOpen, onClose, walletAddress }: BridgeInterf
             executionTime: 120 // 2 minutes for Fusion+
           };
         } catch (error) {
-          console.warn("Fusion+ quote failed, using fallback calculation");
+          console.warn("Fusion+ quote failed, using real-time price calculation");
           
-          // Fallback to price calculation
-          const prices = await oneInchAPI.getTokenPrices([
-            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"
-          ], 1);
+          // Get real-time prices from CoinGecko
+          const ethBtcPrice = await coinGeckoAPI.getETHBTCPrice();
+          const ethPrice = (await coinGeckoAPI.getSimplePrice(['ethereum'])).ethereum?.usd || 3400;
+          const btcPrice = (await coinGeckoAPI.getSimplePrice(['bitcoin'])).bitcoin?.usd || 68000;
           
-          const ethPrice = prices["0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"] || 3400;
-          const btcPrice = prices["0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"] || 68000;
-          
-          const rate = fromToken === "ETH" ? ethPrice / btcPrice : btcPrice / ethPrice;
+          const rate = ethBtcPrice ? 
+            (fromToken === "ETH" ? ethBtcPrice.eth_to_btc : ethBtcPrice.btc_to_eth) :
+            (fromToken === "ETH" ? ethPrice / btcPrice : btcPrice / ethPrice);
           const toAmount = (amountNum * rate * 0.995).toFixed(fromToken === "ETH" ? 8 : 6);
           
           quote = {
