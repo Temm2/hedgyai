@@ -327,20 +327,23 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                       )}
                     </div>
                     
-                    {investmentData.amount && (
+                     {investmentData.amount && (
                       <>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label className="flex items-center gap-2 text-sm">
                               <Calculator className="w-3 h-3" />
-                              Min Return (Real-time)
+                              Min Profit (Real-time)
                             </Label>
                             <p className="font-semibold text-green-500">
                               {calculations.isLoading ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                `${calculations.minReturn} ${investmentData.tokenType}`
+                                `+${calculations.minReturn} ${investmentData.tokenType}`
                               )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Profit on top of {investmentData.amount} {investmentData.tokenType}
                             </p>
                             {calculations.spotPrice > 0 && !calculations.isLoading && (
                               <p className="text-xs text-muted-foreground">
@@ -349,17 +352,34 @@ export function InvestSection({ investments, setInvestments }: InvestSectionProp
                             )}
                           </div>
                           <div>
-                            <Label className="text-sm">Guaranteed Return</Label>
+                            <Label className="text-sm">Guaranteed Profit</Label>
                             <p className="font-semibold text-blue-500">
                               {calculations.isLoading ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
-                                `${calculations.guaranteedReturn} ${investmentData.tokenType}`
+                                `+${calculations.guaranteedReturn} ${investmentData.tokenType}`
                               )}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              80% of calculated return
+                              80% of calculated profit
                             </p>
+                          </div>
+                        </div>
+                        
+                        {/* Total Return Display */}
+                        <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                          <Label className="text-sm font-medium">Total Expected Return</Label>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-sm text-muted-foreground">
+                              {investmentData.amount} {investmentData.tokenType} + {calculations.minReturn} {investmentData.tokenType} profit
+                            </span>
+                            <span className="font-semibold text-primary">
+                              {calculations.isLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                `= ${(parseFloat(investmentData.amount) + parseFloat(calculations.minReturn)).toFixed(4)} ${investmentData.tokenType}`
+                              )}
+                            </span>
                           </div>
                         </div>
                         
