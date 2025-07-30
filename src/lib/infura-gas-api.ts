@@ -2,19 +2,19 @@
 const INFURA_GAS_API_URL = 'https://gas.api.infura.io/v3/86f7c245ec6b41e29725c815457d8c66';
 
 export interface InfuraGasPrice {
-  safeLow: {
+  low: {
     suggestedMaxPriorityFeePerGas: string;
     suggestedMaxFeePerGas: string;
     minWaitTimeEstimate: number;
     maxWaitTimeEstimate: number;
   };
-  standard: {
+  medium: {
     suggestedMaxPriorityFeePerGas: string;
     suggestedMaxFeePerGas: string;
     minWaitTimeEstimate: number;
     maxWaitTimeEstimate: number;
   };
-  fast: {
+  high: {
     suggestedMaxPriorityFeePerGas: string;
     suggestedMaxFeePerGas: string;
     minWaitTimeEstimate: number;
@@ -45,7 +45,7 @@ export class InfuraGasAPI {
     }
   }
 
-  async getEstimatedGasCost(priority: 'safeLow' | 'standard' | 'fast' = 'standard'): Promise<number> {
+  async getEstimatedGasCost(priority: 'low' | 'medium' | 'high' = 'medium'): Promise<number> {
     try {
       const gasData = await this.getGasPrices();
       
@@ -54,9 +54,9 @@ export class InfuraGasAPI {
       }
 
       const gasPrice = parseFloat(gasData[priority].suggestedMaxFeePerGas);
-      const gasLimit = 21000; // Standard ETH transfer
+      const gasLimit = 150000; // Complex DeFi transaction estimate
       
-      // Convert from gwei to ETH
+      // Convert from gwei to ETH (gasPrice is in gwei)
       return (gasPrice * gasLimit) / 1e9;
     } catch (error) {
       console.error('Error calculating Infura gas cost:', error);

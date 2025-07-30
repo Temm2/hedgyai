@@ -77,7 +77,7 @@ export function useInvestmentCalculations(
         try {
           if (chainId === 1) {
             // Try Infura first for Ethereum
-            gasCost = await infuraGasAPI.getEstimatedGasCost('standard');
+            gasCost = await infuraGasAPI.getEstimatedGasCost('medium');
           }
           
           // Fallback to Blocknative for all chains
@@ -220,13 +220,13 @@ function getStrategyRiskLevel(strategy: string): 'Low' | 'Medium' | 'High' {
 
 function getFallbackGasCost(chainId: number): number {
   const gasEstimates: Record<number, number> = {
-    1: 0.02,    // Ethereum
-    137: 0.01,  // Polygon
-    56: 0.005,  // BSC
-    42161: 0.005, // Arbitrum
-    0: 0.0001,  // Bitcoin
+    1: 0.008,    // Ethereum - more realistic for DeFi
+    137: 0.001,  // Polygon
+    56: 0.002,   // BSC
+    42161: 0.001, // Arbitrum
+    0: 0.0001,   // Bitcoin
   };
-  return gasEstimates[chainId] || 0.02;
+  return gasEstimates[chainId] || 0.008;
 }
 
 function getDefiYieldMultiplier(defiYield: number, strategy: string): number {
@@ -251,8 +251,8 @@ function calculateFallbackReturn(amount: string, strategy: string, lockPeriod: s
 
 function getTokenFallbackPrice(tokenType: string): number {
   const fallbackPrices: Record<string, number> = {
-    'ETH': 2400,
-    'BTC': 42000,
+    'ETH': 3766,
+    'BTC': 98000,
     'USDC': 1,
     'USDT': 1,
     'DAI': 1,
